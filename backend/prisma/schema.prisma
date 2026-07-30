@@ -1,0 +1,579 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated/client"
+}
+
+// ============================================================================
+// ACADEMIC HIERARCHY
+// University → Department → Course → AcademicYear → Semester → Section → Subject
+// ============================================================================
+
+model Department {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String   @unique
+  description String?
+  status      String   @default("ACTIVE") // ACTIVE, INACTIVE
+
+  // Relations
+  courses            Course[]
+  subjects           Subject[]
+  users              User[]
+  questionCategories QuestionCategory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Course {
+  id           String     @id @default(uuid())
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+  name         String
+  code         String     @unique
+  duration     Int        @default(4) // years
+  description  String?
+  status       String     @default("ACTIVE")
+
+  // Relations
+  semesters          Semester[]
+  studentEnrollments StudentEnrollment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AcademicYear {
+  id        String @id @default(uuid())
+  name      String @unique // e.g. "2026-2027"
+  startDate DateTime
+  endDate   DateTime
+  isCurrent Boolean @default(false)
+  status    String  @default("ACTIVE") // ACTIVE, COMPLETED, UPCOMING
+
+  // Relations
+  semesters          Semester[]
+  facultyAssignments FacultyAssignment[]
+  studentEnrollments StudentEnrollment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Semester {
+  id             String       @id @default(uuid())
+  courseId        String
+  course         Course       @relation(fields: [courseId], references: [id])
+  academicYearId String
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  semesterNumber Int
+  status         String       @default("ACTIVE") // ACTIVE, COMPLETED
+
+  // Relations
+  sections           Section[]
+  subjects           Subject[]
+  studentEnrollments StudentEnrollment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([courseId, academicYearId, semesterNumber])
+}
+
+model Section {
+  id         String   @id @default(uuid())
+  semesterId String
+  semester   Semester @relation(fields: [semesterId], references: [id])
+  name       String   // A, B, C, etc.
+  capacity   Int      @default(60)
+  status     String   @default("ACTIVE")
+
+  // Relations
+  studentEnrollments StudentEnrollment[]
+  facultyAssignments FacultyAssignment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([semesterId, name])
+}
+
+model Subject {
+  id           String     @id @default(uuid())
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+  semesterId   String
+  semester     Semester   @relation(fields: [semesterId], references: [id])
+  code         String     @unique
+  name         String
+  credits      Int        @default(3)
+  type         String     @default("THEORY") // THEORY, LAB, ELECTIVE, OPEN_ELECTIVE
+  description  String?
+  status       String     @default("ACTIVE")
+
+  // Relations
+  facultyAssignments FacultyAssignment[]
+  questionBanks      QuestionBank[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================================================
+// FACULTY ASSIGNMENT (Bridge Table)
+// Links Faculty → Subject → Section for an Academic Year
+// ============================================================================
+
+model FacultyAssignment {
+  id             String       @id @default(uuid())
+  facultyId      String
+  faculty        User         @relation("FacultyAssignments", fields: [facultyId], references: [id])
+  subjectId      String
+  subject        Subject      @relation(fields: [subjectId], references: [id])
+  sectionId      String
+  section        Section      @relation(fields: [sectionId], references: [id])
+  academicYearId String
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  teachingType   String       @default("THEORY") // THEORY, LAB, BOTH
+  status         String       @default("ACTIVE") // ACTIVE, INACTIVE, COMPLETED
+
+  // Relations
+  exams Exam[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([facultyId, subjectId, sectionId, academicYearId])
+}
+
+// ============================================================================
+// STUDENT ENROLLMENT (Dedicated Bridge Table)
+// ============================================================================
+
+model StudentEnrollment {
+  id             String       @id @default(uuid())
+  studentId      String
+  student        User         @relation("StudentEnrollments", fields: [studentId], references: [id])
+  courseId        String
+  course         Course       @relation(fields: [courseId], references: [id])
+  semesterId     String
+  semester       Semester     @relation(fields: [semesterId], references: [id])
+  sectionId      String
+  section        Section      @relation(fields: [sectionId], references: [id])
+  academicYearId String
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  enrollmentDate DateTime     @default(now())
+  status         String       @default("ACTIVE") // ACTIVE, COMPLETED, TRANSFERRED, DROPPED
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, academicYearId])
+}
+
+// ============================================================================
+// USER MODEL
+// ============================================================================
+
+model User {
+  id          String      @id @default(uuid())
+  name        String
+  email       String      @unique
+  register_no String?     @unique
+  employeeId  String?     @unique
+  password    String
+  role        String      // SUPER_ADMIN, ADMIN, FACULTY, STUDENT
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  phone       String?
+  status      String      @default("ACTIVE") // ACTIVE, INACTIVE, SUSPENDED
+
+  // Faculty Relations
+  facultyAssignments FacultyAssignment[] @relation("FacultyAssignments")
+  questionCategories QuestionCategory[]
+
+  // Student Relations
+  enrollments    StudentEnrollment[] @relation("StudentEnrollments")
+  sessions       ExamSession[]
+  results        Result[]
+  studentAnswers StudentAnswer[]
+
+  // Evaluation Relations
+  evaluatedAnswers StudentAnswer[] @relation("EvaluatedByFaculty")
+
+  // Common Relations
+  notifications   Notification[]
+  warnings        Warning[]
+  activityLogs    ActivityLog[]
+  browserSessions BrowserSession[]
+  uploads         Upload[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================================================
+// QUESTION MANAGEMENT
+// ============================================================================
+
+model QuestionCategory {
+  id           String     @id @default(uuid())
+  name         String
+  description  String?
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+  createdById  String
+  createdBy    User       @relation(fields: [createdById], references: [id])
+  questions    Question[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, departmentId])
+}
+
+model QuestionTag {
+  id        String               @id @default(uuid())
+  name      String               @unique
+  questions QuestionTagMapping[]
+
+  createdAt DateTime @default(now())
+}
+
+model QuestionTagMapping {
+  questionId String
+  tagId      String
+  question   Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  tag        QuestionTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, tagId])
+}
+
+model QuestionBank {
+  id        String   @id @default(uuid())
+  name      String
+  subjectId String
+  subject   Subject  @relation(fields: [subjectId], references: [id])
+  questions Question[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Question {
+  id            String             @id @default(uuid())
+  bankId        String
+  bank          QuestionBank       @relation(fields: [bankId], references: [id])
+  type          String             @default("MCQ") // MCQ, MULTIPLE_CORRECT, TRUE_FALSE, FILL_IN_BLANK, SHORT_ANSWER, LONG_ANSWER, CODING, FILE_UPLOAD, MATCHING
+  text          String
+  marks         Float              @default(1)
+  negativeMarks Float              @default(0)
+  difficulty    String             @default("MEDIUM") // EASY, MEDIUM, HARD
+  categoryId    String?
+  category      QuestionCategory?  @relation(fields: [categoryId], references: [id])
+  explanation   String?
+  bloomsLevel   String?
+  estimatedTime Int?
+  attachmentUrl String?
+
+  unit    String?
+  chapter String?
+  topic   String?
+
+  programmingLanguage String?
+  starterCode         String?
+  sampleInput         String?
+  sampleOutput        String?
+  hiddenTestCases     String?
+  timeLimit           Int?
+  memoryLimit         Int?
+
+  tags           QuestionTagMapping[]
+  options        QuestionOption[]
+  studentAnswers StudentAnswer[]
+  examQuestions  ExamQuestion[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model QuestionOption {
+  id             String          @id @default(uuid())
+  questionId     String
+  question       Question        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  text           String
+  isCorrect      Boolean         @default(false)
+  matchText      String?
+  studentAnswers StudentAnswer[] @relation("SelectedOptions")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================================================
+// EXAM MODEL
+// ============================================================================
+
+model Exam {
+  id                 String            @id @default(uuid())
+  title              String
+  facultyAssignmentId String
+  facultyAssignment  FacultyAssignment @relation(fields: [facultyAssignmentId], references: [id])
+  durationMins       Int
+  passingMarks       Float
+  totalMarks         Float
+  instructions       String?
+  status             String            @default("DRAFT") // DRAFT, PUBLISHED, ACTIVE, COMPLETED, RESULTS_PUBLISHED, CANCELLED
+  startTime          DateTime?
+  endTime            DateTime?
+
+  // Relations
+  config        ExamConfiguration?
+  sessions      ExamSession[]
+  results       Result[]
+  examQuestions ExamQuestion[]
+  activityLogs  ActivityLog[]
+  notifications Notification[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ExamConfiguration {
+  id                String    @id @default(uuid())
+  examId            String    @unique
+  exam              Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+  maxWarnings       Int       @default(3)
+  autoSubmit        Boolean   @default(true)
+  autoSaveInterval  Int       @default(30)
+  allowResume       Boolean   @default(true)
+  requireFullscreen Boolean   @default(true)
+  randomQuestions   Boolean   @default(true)
+  randomOptions     Boolean   @default(true)
+  calculatorAllowed Boolean   @default(false)
+  lateEntryAllowed  Boolean   @default(false)
+  lateEntryMins     Int       @default(15)
+  resultPublishTime DateTime?
+}
+
+model ExamQuestion {
+  id         String   @id @default(uuid())
+  examId     String
+  exam       Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id])
+  orderIndex Int      @default(0)
+}
+
+// ============================================================================
+// EXAM SESSION & ANSWERS (Enhanced)
+// ============================================================================
+
+model ExamSession {
+  id             String          @id @default(uuid())
+  examId         String
+  exam           Exam            @relation(fields: [examId], references: [id])
+  studentId      String
+  student        User            @relation(fields: [studentId], references: [id])
+
+  // Timing
+  startTime      DateTime        @default(now())
+  startedAt      DateTime        @default(now())
+  endTime        DateTime?
+  submittedAt    DateTime?
+  timeTaken      Int?            // seconds
+  lastSavedAt    DateTime?
+
+  // Status & Metadata
+  status         String          @default("IN_PROGRESS") // IN_PROGRESS, SUBMITTED, AUTO_SUBMITTED, TERMINATED
+  submissionType String?         // MANUAL, AUTO_SUBMIT, FORCE_SUBMIT
+  attemptNumber  Int             @default(1)
+  isLateSubmission Boolean       @default(false)
+
+  // Security Metrics
+  warningCount       Int         @default(0)
+  fullscreenViolations Int       @default(0)
+  networkDisconnects Int         @default(0)
+
+  // Score Summary (populated on submission)
+  totalMarks     Float?
+  obtainedMarks  Float?
+  objectiveMarks Float?
+  descriptiveMarks Float?
+  percentage     Float?
+
+  // Device Info
+  ipAddress      String?
+  deviceInfo     String?
+  browser        String?
+
+  // Relations
+  warnings       Warning[]
+  studentAnswers StudentAnswer[]
+  activityLogs   ActivityLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model StudentAnswer {
+  id         String      @id @default(uuid())
+  sessionId  String
+  session    ExamSession @relation(fields: [sessionId], references: [id])
+  studentId  String
+  student    User        @relation(fields: [studentId], references: [id])
+  questionId String
+  question   Question    @relation(fields: [questionId], references: [id])
+
+  // Answer Data
+  textResponse    String?
+  fileUrl         String?
+  selectedOptions QuestionOption[] @relation("SelectedOptions")
+  marksObtained   Float?
+  isCorrect       Boolean?
+
+  // Evaluation
+  isEvaluated       Boolean   @default(false)
+  evaluatedById     String?
+  evaluatedBy       User?     @relation("EvaluatedByFaculty", fields: [evaluatedById], references: [id])
+  evaluationRemarks String?
+  evaluationStatus  String    @default("PENDING") // PENDING, AUTO_EVALUATED, EVALUATED
+  evaluatedAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Result {
+  id            String   @id @default(uuid())
+  examId        String
+  exam          Exam     @relation(fields: [examId], references: [id])
+  studentId     String
+  student       User     @relation(fields: [studentId], references: [id])
+  sessionId     String?
+
+  // Marks
+  marksObtained    Float    @default(0)
+  totalMarks       Float
+  objectiveMarks   Float    @default(0)
+  descriptiveMarks Float    @default(0)
+  percentage       Float    @default(0)
+  isPass           Boolean  @default(false)
+
+  // Grade
+  grade         String?
+
+  // Status: AUTO_EVALUATED → PENDING_EVALUATION → EVALUATED → PUBLISHED
+  status        String   @default("AUTO_EVALUATED")
+
+  published     Boolean  @default(false)
+  publishedAt   DateTime?
+  remarks       String?
+
+  // Stats
+  totalQuestions     Int    @default(0)
+  attemptedQuestions Int    @default(0)
+  correctAnswers     Int    @default(0)
+  incorrectAnswers   Int    @default(0)
+  unansweredQuestions Int   @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================================================
+// GRADE BOUNDARIES (Configurable)
+// ============================================================================
+
+model GradeBoundary {
+  id            String  @id @default(uuid())
+  grade         String  @unique // A+, A, B+, B, C, F
+  minPercentage Float
+  maxPercentage Float
+  description   String?
+  isPass        Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================================================
+// NOTIFICATIONS, WARNINGS, ACTIVITY LOGS
+// ============================================================================
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  examId    String?
+  exam      Exam?    @relation(fields: [examId], references: [id])
+  type      String   @default("GENERAL") // EXAM_PUBLISHED, EXAM_REMINDER, SCHEDULE_CHANGE, RESULT_PUBLISHED, SUBMISSION_RECEIVED, EVALUATION_COMPLETED, WARNING, SYSTEM
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Warning {
+  id        String      @id @default(uuid())
+  sessionId String
+  session   ExamSession @relation(fields: [sessionId], references: [id])
+  studentId String
+  student   User        @relation(fields: [studentId], references: [id])
+  type      String
+  message   String
+
+  createdAt DateTime @default(now())
+}
+
+model ActivityLog {
+  id        String       @id @default(uuid())
+  userId    String?
+  user      User?        @relation(fields: [userId], references: [id])
+  role      String?
+  examId    String?
+  exam      Exam?        @relation(fields: [examId], references: [id])
+  sessionId String?
+  session   ExamSession? @relation(fields: [sessionId], references: [id])
+  action    String
+  details   String?
+  ipAddress String?
+  browser   String?
+  device    String?
+
+  createdAt DateTime @default(now())
+}
+
+// ============================================================================
+// SUPPORTING MODELS
+// ============================================================================
+
+model BrowserSession {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  token     String   @unique
+  userAgent String?
+  ipAddress String?
+  expiresAt DateTime
+
+  createdAt DateTime @default(now())
+}
+
+model Upload {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  fileName  String
+  fileUrl   String
+  fileType  String
+
+  createdAt DateTime @default(now())
+}
