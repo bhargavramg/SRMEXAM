@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const prisma = require('../utils/db');
 
 const authenticateUser = async (identifier, password, ipAddress, userAgent) => {
+  console.log(`[LOGIN DEBUG] Attempting login for identifier: ${identifier}`);
   // Check if identifier is email or register_no
   const user = await prisma.user.findFirst({
     where: {
@@ -14,18 +15,29 @@ const authenticateUser = async (identifier, password, ipAddress, userAgent) => {
   });
 
   if (!user) {
-    throw new Error('Invalid credentials.');
+    console.log(`[LOGIN DEBUG] User not found for identifier: ${identifier}`);
+    throw new Error('Invalid credentials: User not found.');
+  }
+  
+  console.log(`[LOGIN DEBUG] User found: ID=${user.id}, Role=${user.role}, Status=${user.status}`);
+
+  if (user.status !== 'ACTIVE') {
+    console.log(`[LOGIN DEBUG] User is not active. Status: ${user.status}`);
+    throw new Error(`Account is ${user.status}`);
   }
 
   const isPasswordValid = await bcrypt.compare(password, user.password);
+  console.log(`[LOGIN DEBUG] bcrypt.compare result: ${isPasswordValid}`);
+  
   if (!isPasswordValid) {
-    throw new Error('Invalid credentials.');
+    throw new Error('Invalid credentials: Password mismatch.');
   }
 
+  console.log(`[LOGIN DEBUG] Generating JWTs for user ${user.id}`);
   const accessToken = jwt.sign(
-    { id: user.id, role: user.role },
+    { id: user.id, role: user.role, firstLogin: user.firstLogin },
     process.env.JWT_SECRET,
-    { expiresIn: '15m' }
+    { expiresIn: '2h' }
   );
 
   const refreshToken = jwt.sign(
@@ -73,9 +85,9 @@ const refreshAccessToken = async (token) => {
   if (!user) throw new Error('User not found.');
 
   return jwt.sign(
-    { id: user.id, role: user.role },
+    { id: user.id, role: user.role, firstLogin: user.firstLogin },
     process.env.JWT_SECRET,
-    { expiresIn: '15m' }
+    { expiresIn: '2h' }
   );
 };
 

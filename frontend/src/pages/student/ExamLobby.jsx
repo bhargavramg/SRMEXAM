@@ -46,10 +46,13 @@ const ExamLobby = () => {
       }, 2500);
 
     } catch (error) {
-      console.error("Failed to start exam", error);
-      alert("Failed to start exam. Please try again.");
+      console.error("Failed to start exam backend response:", error);
+      alert("Failed to start exam: " + (error.error || error.message || 'Unknown error'));
       setStarting(false);
       setShowLoadingScreen(false);
+      if (document.fullscreenElement) {
+         document.exitFullscreen().catch(e => console.log(e));
+      }
     }
   };
 

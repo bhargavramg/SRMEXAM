@@ -38,13 +38,20 @@ const adminApi = {
 
   // Faculty
   getFacultyList: () => axiosClient.get('/admin/faculty'),
+  getFacultyById: (id) => axiosClient.get(`/admin/faculty/${id}`),
   createFaculty: (data) => axiosClient.post('/admin/faculty', data),
   updateFaculty: (id, data) => axiosClient.put(`/admin/faculty/${id}`, data),
+  resetFacultyPassword: (id) => axiosClient.put(`/admin/faculty/${id}/reset-password`),
+  deleteFaculty: (id) => axiosClient.delete(`/admin/faculty/${id}`),
 
   // Students
-  getStudentList: () => axiosClient.get('/admin/students'),
+  getStudentList: (params) => axiosClient.get('/admin/students', { params }),
+  getStudentStats: () => axiosClient.get('/admin/students/stats'),
+  getStudentById: (id) => axiosClient.get(`/admin/students/${id}`),
   createStudent: (data) => axiosClient.post('/admin/students', data),
+  importStudents: (students) => axiosClient.post('/admin/students/import', { students }),
   updateStudent: (id, data) => axiosClient.put(`/admin/students/${id}`, data),
+  deleteStudent: (id) => axiosClient.delete(`/admin/students/${id}`),
 
   // Faculty Assignments
   getFacultyAssignments: () => axiosClient.get('/admin/faculty-assignments'),
@@ -52,10 +59,19 @@ const adminApi = {
   updateFacultyAssignment: (id, data) => axiosClient.put(`/admin/faculty-assignments/${id}`, data),
   deleteFacultyAssignment: (id) => axiosClient.delete(`/admin/faculty-assignments/${id}`),
 
-  // Student Enrollments
-  getStudentEnrollments: () => axiosClient.get('/admin/student-enrollments'),
-  createStudentEnrollment: (data) => axiosClient.post('/admin/student-enrollments', data),
-  updateStudentEnrollment: (id, data) => axiosClient.put(`/admin/student-enrollments/${id}`, data),
+  // Assessment Types
+  getAssessmentTypes: () => axiosClient.get('/admin/assessment-types'),
+  createAssessmentType: (data) => axiosClient.post('/admin/assessment-types', data),
+  updateAssessmentType: (id, data) => axiosClient.put(`/admin/assessment-types/${id}`, data),
+  deleteAssessmentType: (id) => axiosClient.delete(`/admin/assessment-types/${id}`),
+
+  // University-Wide Exams & Results
+  getExams: () => axiosClient.get('/admin/exams'),
+  getResults: () => axiosClient.get('/admin/results'),
+  unlockResults: (examId) => axiosClient.put(`/admin/exams/${examId}/unlock-results`),
+
+  // Audit Logs
+  getAuditLogs: () => axiosClient.get('/admin/audit-logs'),
 };
 
 export default adminApi;

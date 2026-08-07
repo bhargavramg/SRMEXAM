@@ -8,10 +8,7 @@ const QuestionOptionSchema = z.object({
 
 const BaseQuestionSchema = z.object({
   bankId: z.string().uuid(),
-  type: z.enum([
-    'MCQ', 'MULTIPLE_CORRECT', 'TRUE_FALSE', 'FILL_IN_BLANK',
-    'SHORT_ANSWER', 'LONG_ANSWER', 'CODING', 'FILE_UPLOAD', 'MATCHING'
-  ]),
+  type: z.literal('MCQ').default('MCQ'),
   text: z.string().min(5, 'Question text must be at least 5 characters'),
   marks: z.number().positive(),
   negativeMarks: z.number().min(0).default(0),
@@ -19,49 +16,31 @@ const BaseQuestionSchema = z.object({
   categoryId: z.string().uuid().optional(),
   explanation: z.string().optional(),
   bloomsLevel: z.string().optional(),
-  estimatedTime: z.number().int().positive().optional(),
-  attachmentUrl: z.string().url().optional(),
-  
-  // Metadata
-  unit: z.string().optional(),
-  chapter: z.string().optional(),
-  topic: z.string().optional(),
   tags: z.array(z.string()).optional(), // Tag names
-});
-
-const CodingSpecificSchema = z.object({
-  programmingLanguage: z.string(),
-  starterCode: z.string().optional(),
-  sampleInput: z.string().optional(),
-  sampleOutput: z.string().optional(),
-  hiddenTestCases: z.string().optional(),
-  timeLimit: z.number().int().positive().optional(),
-  memoryLimit: z.number().int().positive().optional(),
 });
 
 const CreateQuestionBase = BaseQuestionSchema.merge(
   z.object({
     options: z.array(QuestionOptionSchema).optional(),
-    codingDetails: CodingSpecificSchema.optional(),
   })
 );
 
 const CreateQuestionSchema = CreateQuestionBase.superRefine((data, ctx) => {
-  if (data.type === 'MCQ' || data.type === 'MULTIPLE_CORRECT') {
-    if (!data.options || data.options.length < 2) {
+  if (!data.options || data.options.length !== 4) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'MCQ questions require exactly 4 options',
+      path: ['options']
+    });
+  } else {
+    const correctOptions = data.options.filter(o => o.isCorrect);
+    if (correctOptions.length !== 1) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'MCQ and Multiple Correct questions require at least 2 options',
+        message: 'MCQ questions must have exactly 1 correct option',
         path: ['options']
       });
     }
-  }
-  if (data.type === 'CODING' && !data.codingDetails) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Coding questions require codingDetails to be provided',
-      path: ['codingDetails']
-    });
   }
 });
 

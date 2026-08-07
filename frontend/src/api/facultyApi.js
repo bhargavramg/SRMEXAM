@@ -6,6 +6,18 @@ const facultyApi = {
 
   // My Assignments
   getMyAssignments: () => axiosClient.get('/faculty/assignments'),
+  getAssignmentStudents: (id) => axiosClient.get(`/faculty/assignments/${id}/students`),
+
+  // Student Management
+  getStudents: (params) => axiosClient.get('/faculty/students', { params }),
+  getStudentById: (id) => axiosClient.get(`/faculty/students/${id}`),
+  createStudent: (data) => axiosClient.post('/faculty/students', data),
+  updateStudent: (id, data) => axiosClient.put(`/faculty/students/${id}`, data),
+  resetStudentPassword: (id, data) => axiosClient.put(`/faculty/students/${id}/reset-password`, data),
+  updateStudentStatus: (id, data) => axiosClient.put(`/faculty/students/${id}/status`, data),
+  deleteStudent: (id) => axiosClient.delete(`/faculty/students/${id}`),
+  importStudents: (data) => axiosClient.post('/faculty/students/import', data),
+  exportStudents: () => axiosClient.get('/faculty/students/export'),
 
   // Exams
   getExams: (params) => axiosClient.get('/faculty/exams', { params }),
@@ -27,9 +39,7 @@ const facultyApi = {
   deleteQuestion: (id) => axiosClient.delete(`/faculty/questions/${id}`),
 
   // Import/Export
-  importQuestions: (formData) => axiosClient.post('/faculty/questions/import', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  }),
+  importQuestions: (data) => axiosClient.post('/faculty/questions/bulk', data),
   exportQuestions: (params) => axiosClient.get('/faculty/questions/export', {
     params,
     responseType: 'blob',
@@ -37,9 +47,11 @@ const facultyApi = {
 
   // Categories
   getCategories: () => axiosClient.get('/faculty/categories'),
+  getCategory: (id) => axiosClient.get(`/faculty/categories/${id}`),
   createCategory: (data) => axiosClient.post('/faculty/categories', data),
   updateCategory: (id, data) => axiosClient.put(`/faculty/categories/${id}`, data),
   deleteCategory: (id) => axiosClient.delete(`/faculty/categories/${id}`),
+  getCategoryAnalytics: (id) => axiosClient.get(`/faculty/categories/${id}/analytics`),
 
   // Monitoring
   getMonitoringData: () => axiosClient.get('/faculty/monitoring'),
@@ -47,12 +59,14 @@ const facultyApi = {
   // Results & Evaluation
   getResults: (params) => axiosClient.get('/faculty/results', { params }),
   getResultsDashboard: () => axiosClient.get('/faculty/results/dashboard'),
+  getPublishReadyExams: () => axiosClient.get('/faculty/results/publish-ready'),
   getExamSubmissions: (examId) => axiosClient.get(`/faculty/results/exam/${examId}`),
   getSubmissionDetail: (sessionId) => axiosClient.get(`/faculty/results/submission/${sessionId}`),
   evaluateAnswer: (answerId, data) => axiosClient.put(`/faculty/results/answer/${answerId}`, data),
   saveEvaluationDraft: (sessionId, evaluations) => axiosClient.put(`/faculty/results/submission/${sessionId}/draft`, { evaluations }),
   completeEvaluation: (sessionId) => axiosClient.post(`/faculty/results/submission/${sessionId}/complete`),
   publishResults: (examId) => axiosClient.post(`/faculty/results/${examId}/publish`),
+  unpublishResults: (examId) => axiosClient.post(`/faculty/results/${examId}/unpublish`),
   getExamAnalytics: (examId) => axiosClient.get(`/faculty/results/exam/${examId}/analytics`),
   exportResults: (examId, format) => axiosClient.get(`/faculty/results/exam/${examId}/export`, {
     params: { format },

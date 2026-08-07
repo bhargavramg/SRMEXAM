@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, Typography, Button, Card, CardContent, CircularProgress, Radio, RadioGroup, FormControlLabel, FormControl, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Grid, Paper, Divider } from '@mui/material';
+import { Box, Typography, Button, Card, CardContent, CircularProgress, Radio, RadioGroup, FormControlLabel, FormControl, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Grid, Paper, Divider, TextField } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import studentApi from '../../api/studentApi';
@@ -22,6 +22,7 @@ const ExamInterface = () => {
   // New States for Single-Question View
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [reviewStatus, setReviewStatus] = useState({}); // { [questionId]: 'marked' | 'visited' }
+  const [timeSpent, setTimeSpent] = useState({}); // { [questionId]: seconds }
 
   const socketRef = useRef(null);
   const configRef = useRef(null);
@@ -216,7 +217,7 @@ const ExamInterface = () => {
     if (!examConfig?.autoSaveInterval || Object.keys(answers).length === 0) return;
     
     const autoSaveTimer = setInterval(() => {
-      studentApi.autoSaveAnswers(sessionId, answers).catch(console.error);
+      studentApi.autoSaveAnswers(sessionId, getEnhancedAnswers()).catch(console.error);
     }, examConfig.autoSaveInterval * 1000);
 
     return () => clearInterval(autoSaveTimer);
@@ -232,12 +233,49 @@ const ExamInterface = () => {
     }
   }, [currentQuestionIndex, questionsData]);
 
+  // Track time spent per question
+  useEffect(() => {
+    const currentQ = questionsData?.questions?.[currentQuestionIndex];
+    if (!currentQ) return;
+    
+    const timerId = setInterval(() => {
+      setTimeSpent(prev => ({
+        ...prev,
+        [currentQ.id]: (prev[currentQ.id] || 0) + 1
+      }));
+    }, 1000);
+
+    return () => clearInterval(timerId);
+  }, [currentQuestionIndex, questionsData]);
+
+  const getEnhancedAnswers = () => {
+    const enhanced = {};
+    if (!questionsData?.questions) return enhanced;
+
+    questionsData.questions.forEach(q => {
+      const isAnswered = !!answers[q.id];
+      const isDescriptive = ['SHORT_ANSWER', 'LONG_ANSWER', 'ESSAY'].includes(q.type);
+      const isVisited = !!reviewStatus[q.id] || !!timeSpent[q.id] || isAnswered;
+      
+      if (isVisited) {
+        enhanced[q.id] = {
+          selectedOptionId: !isDescriptive ? (answers[q.id] || null) : null,
+          textAnswer: isDescriptive ? (answers[q.id] || null) : null,
+          timeSpent: timeSpent[q.id] || 0,
+          markedForReview: reviewStatus[q.id] === 'marked',
+          visited: isVisited
+        };
+      }
+    });
+    return enhanced;
+  };
+
   const forceSubmitExam = async (reason) => {
     if (submitting) return;
     setSubmitting(true);
     alert(reason);
     try {
-      const result = await studentApi.submitExam(sessionId, answers, true);
+      const result = await studentApi.submitExam(sessionId, getEnhancedAnswers(), true);
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(console.error);
       }
@@ -257,7 +295,7 @@ const ExamInterface = () => {
     if (!window.confirm("Are you sure you want to submit your exam? You cannot undo this action.")) return;
     setSubmitting(true);
     try {
-      const result = await studentApi.submitExam(sessionId, answers, false);
+      const result = await studentApi.submitExam(sessionId, getEnhancedAnswers(), false);
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(console.error);
       }
@@ -391,36 +429,49 @@ const ExamInterface = () => {
               {currentQuestion?.text}
             </Typography>
 
-            {/* Options */}
+            {/* Options or Text Input */}
             <FormControl component="fieldset" sx={{ mt: 2, width: '100%', flexGrow: 1 }}>
-              <RadioGroup
-                value={answers[currentQuestion?.id] || ''}
-                onChange={(e) => handleOptionChange(currentQuestion.id, e.target.value)}
-              >
-                {currentQuestion?.options?.map(option => (
-                  <FormControlLabel 
-                    key={option.id} 
-                    value={option.id} 
-                    control={<Radio color="primary" />} 
-                    label={
-                      <Typography sx={{ fontSize: '1.05rem', p: 1 }}>
-                        {option.text}
-                      </Typography>
-                    } 
-                    sx={{
-                       mb: 1.5, 
-                       bgcolor: answers[currentQuestion.id] === option.id ? 'primary.50' : '#F9F9F9',
-                       border: '1px solid',
-                       borderColor: answers[currentQuestion.id] === option.id ? 'primary.main' : '#E0E0E0',
-                       borderRadius: 2,
-                       ml: 0,
-                       width: '100%',
-                       transition: 'all 0.2s',
-                       '&:hover': { bgcolor: 'primary.50', borderColor: 'primary.light' }
-                    }}
-                  />
-                ))}
-              </RadioGroup>
+              {['SHORT_ANSWER', 'LONG_ANSWER', 'ESSAY'].includes(currentQuestion?.type) ? (
+                <TextField
+                  multiline
+                  minRows={currentQuestion?.type === 'SHORT_ANSWER' ? 3 : 6}
+                  fullWidth
+                  variant="outlined"
+                  placeholder="Type your answer here..."
+                  value={answers[currentQuestion?.id] || ''}
+                  onChange={(e) => handleOptionChange(currentQuestion.id, e.target.value)}
+                  sx={{ mt: 2, bgcolor: '#FAFAFA' }}
+                />
+              ) : (
+                <RadioGroup
+                  value={answers[currentQuestion?.id] || ''}
+                  onChange={(e) => handleOptionChange(currentQuestion.id, e.target.value)}
+                >
+                  {currentQuestion?.options?.map(option => (
+                    <FormControlLabel 
+                      key={option.id} 
+                      value={option.id} 
+                      control={<Radio color="primary" />} 
+                      label={
+                        <Typography sx={{ fontSize: '1.05rem', p: 1 }}>
+                          {option.text}
+                        </Typography>
+                      } 
+                      sx={{
+                         mb: 1.5, 
+                         bgcolor: answers[currentQuestion.id] === option.id ? 'primary.50' : '#F9F9F9',
+                         border: '1px solid',
+                         borderColor: answers[currentQuestion.id] === option.id ? 'primary.main' : '#E0E0E0',
+                         borderRadius: 2,
+                         ml: 0,
+                         width: '100%',
+                         transition: 'all 0.2s',
+                         '&:hover': { bgcolor: 'primary.50', borderColor: 'primary.light' }
+                      }}
+                    />
+                  ))}
+                </RadioGroup>
+              )}
             </FormControl>
 
             {/* Action Buttons */}

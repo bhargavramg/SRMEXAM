@@ -42,7 +42,7 @@ export default function StudentExams() {
                         <Typography variant="h6" color="primary.main" fontWeight={700}>
                           {exam.title}
                         </Typography>
-                        <Chip label={exam.status} color={exam.status === 'PUBLISHED' ? 'success' : 'default'} size="small" />
+                        <Chip label={exam.status} color={['SCHEDULED', 'ACTIVE'].includes(exam.status) ? 'success' : 'default'} size="small" />
                       </Box>
                       
                       <Typography variant="subtitle2" sx={{ mt: 1, mb: 2 }} color="text.secondary">

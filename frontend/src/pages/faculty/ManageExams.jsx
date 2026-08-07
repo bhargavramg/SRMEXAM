@@ -34,9 +34,9 @@ const ManageExams = () => {
       field: 'subject', 
       headerName: 'Assignment', 
       flex: 2,
-      valueGetter: (params) => {
-        const fa = params.row.facultyAssignment;
-        return `${fa?.subject?.name} (${fa?.section?.name})`;
+      renderCell: ({ row }) => {
+        const fa = row.facultyAssignment;
+        return fa?.subject?.name || 'Unknown Assignment';
       }
     },
     { 
@@ -46,9 +46,9 @@ const ManageExams = () => {
       renderCell: (params) => {
         const s = params.value;
         let color = 'default';
-        if (s === 'PUBLISHED') color = 'success';
+        if (['SCHEDULED', 'ACTIVE'].includes(s)) color = 'success';
         if (s === 'DRAFT') color = 'warning';
-        if (s === 'COMPLETED') color = 'info';
+        if (['COMPLETED', 'EVALUATION', 'CLOSED'].includes(s)) color = 'info';
         return <Chip label={s} color={color} size="small" />;
       }
     },
@@ -68,12 +68,12 @@ const ManageExams = () => {
               Publish
             </Button>
           )}
-          {params.row.status === 'PUBLISHED' && (
+          {['SCHEDULED', 'ACTIVE'].includes(params.row.status) && (
              <Button size="small" variant="outlined" color="primary" onClick={() => navigate(`/faculty/live-monitoring/${params.row.id}`)} startIcon={<PlayArrow fontSize="small"/>}>
                Monitor Live
              </Button>
           )}
-          {params.row.status === 'COMPLETED' && (
+          {['COMPLETED', 'EVALUATION', 'CLOSED'].includes(params.row.status) && (
              <Button size="small" variant="outlined" color="info" onClick={() => navigate(`/faculty/results/${params.row.id}`)} startIcon={<Assessment fontSize="small"/>}>
                Results
              </Button>

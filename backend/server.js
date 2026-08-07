@@ -35,6 +35,7 @@ app.use('/api', apiLimiter);
 
 // Routes
 const authRoutes = require('./src/routes/authRoutes');
+const setupRoutes = require('./src/routes/setupRoutes');
 const studentRoutes = require('./src/routes/studentRoutes');
 const facultyRoutes = require('./src/routes/facultyRoutes');
 const questionRoutes = require('./src/routes/questionRoutes');
@@ -44,6 +45,7 @@ const errorHandler = require('./src/errors/errorHandler');
 const logger = require('./src/utils/logger');
 const { NotFoundError } = require('./src/errors/AppError');
 
+app.use('/api/setup', setupRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/student', studentRoutes);
 app.use('/api/faculty', facultyRoutes);

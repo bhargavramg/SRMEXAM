@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import {
   Box, Typography, Card, CardContent, Grid, Button, Chip, CircularProgress,
-  Select, MenuItem, FormControl, InputLabel, IconButton, Tooltip, Paper, Divider
+  Select, MenuItem, FormControl, InputLabel, IconButton, Tooltip, Paper, Divider,
+  Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Alert
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -39,6 +40,11 @@ export default function ResultsDashboard() {
     queryFn: () => facultyApi.getResultsDashboard(),
   });
 
+  const { data: publishReadyExams = [], isLoading: loadingReadyExams } = useQuery({
+    queryKey: ['publishReadyExams'],
+    queryFn: () => facultyApi.getPublishReadyExams(),
+  });
+
   // Fetch submissions for selected exam
   const { data: submissionsData, isLoading: loadingSubmissions } = useQuery({
     queryKey: ['examSubmissions', selectedExam],
@@ -49,6 +55,15 @@ export default function ResultsDashboard() {
   const stats = dashboard?.stats;
   const exams = dashboard?.exams || [];
   const submissions = submissionsData?.submissions || [];
+
+  const [publishModalOpen, setPublishModalOpen] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  
+  const { data: analytics, isLoading: analyticsLoading } = useQuery({
+    queryKey: ['examAnalytics', selectedExam],
+    queryFn: () => facultyApi.getExamAnalytics(selectedExam),
+    enabled: publishModalOpen && !!selectedExam,
+  });
 
   const statCards = stats ? [
     { label: 'Total Submissions', value: stats.totalSubmissions, icon: ClipboardList, color: '#6366F1' },
@@ -74,14 +89,21 @@ export default function ResultsDashboard() {
     }
   };
 
-  const handlePublish = async () => {
+  const handlePublishClick = () => {
     if (!selectedExam) return;
-    if (!window.confirm('Are you sure you want to publish results? Marks will become read-only.')) return;
+    setPublishModalOpen(true);
+  };
+
+  const handleConfirmPublish = async () => {
     try {
+      setIsPublishing(true);
       await facultyApi.publishResults(selectedExam);
+      setPublishModalOpen(false);
       window.location.reload();
     } catch (err) {
       alert(err?.response?.data?.error || 'Failed to publish');
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -194,6 +216,39 @@ export default function ResultsDashboard() {
         ))}
       </Grid>
 
+      {/* Ready to Publish Section */}
+      {publishReadyExams.length > 0 && (
+        <Card sx={{ borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', mb: 3, borderLeft: '4px solid #3B82F6' }}>
+          <CardContent>
+            <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Send size={20} color="#3B82F6" />
+              Exams Ready for Publication
+            </Typography>
+            <Grid container spacing={2}>
+              {publishReadyExams.map(exam => (
+                <Grid item xs={12} md={6} lg={4} key={exam.id}>
+                  <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+                    <Typography variant="subtitle1" fontWeight="bold" noWrap>{exam?.title || 'Unknown'}</Typography>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      {exam?.subject || 'N/A'} ({exam?.section || 'N/A'})
+                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2 }}>
+                      <Chip size="small" label={`${exam.totalSubmissions} Submissions`} />
+                      <Button size="small" variant="contained" onClick={() => {
+                        setSelectedExam(exam.id);
+                        setTimeout(() => handlePublishClick(), 100);
+                      }}>
+                        Review & Publish
+                      </Button>
+                    </Box>
+                  </Paper>
+                </Grid>
+              ))}
+            </Grid>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Exam Selector + Actions */}
       <Card sx={{ borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', mb: 3 }}>
         <CardContent>
@@ -207,7 +262,7 @@ export default function ResultsDashboard() {
               >
                 {exams.map(e => (
                   <MenuItem key={e.id} value={e.id}>
-                    {e.title} — {e.subject} ({e.section}) [{e.totalSubmissions} submissions]
+                    {e?.title || 'Unknown'} — {e?.subject || 'N/A'} ({e?.section || 'N/A'}) [{e.totalSubmissions} submissions]
                   </MenuItem>
                 ))}
               </Select>
@@ -226,7 +281,7 @@ export default function ResultsDashboard() {
                 <Button variant="outlined" size="small" startIcon={<Download size={16} />} onClick={handleExport}>
                   Export CSV
                 </Button>
-                <Button variant="contained" size="small" color="success" startIcon={<Send size={16} />} onClick={handlePublish}>
+                <Button variant="contained" size="small" color="success" startIcon={<Send size={16} />} onClick={handlePublishClick}>
                   Publish Results
                 </Button>
               </>
@@ -266,6 +321,97 @@ export default function ResultsDashboard() {
           <Typography variant="body2" color="text.secondary">Choose an exam from the dropdown above to view student submissions and evaluation status.</Typography>
         </Paper>
       )}
+
+      {/* Publish Confirmation Dialog */}
+      <Dialog open={publishModalOpen} onClose={() => !isPublishing && setPublishModalOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'primary.contrastText' }}>Review & Publish Results</DialogTitle>
+        <DialogContent dividers>
+          {analyticsLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
+          ) : analytics ? (
+            <Box>
+              <Alert severity="warning" sx={{ mb: 3 }}>
+                Publishing results will lock all marks and make them visible to students. This action cannot be undone.
+              </Alert>
+
+              <Grid container spacing={3} sx={{ mb: 4 }}>
+                <Grid item xs={12} sm={4}>
+                  <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
+                    <Typography variant="body2" color="text.secondary">Total Submissions</Typography>
+                    <Typography variant="h4" color="primary">{analytics.summary.totalSubmissions}</Typography>
+                  </Card>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
+                    <Typography variant="body2" color="text.secondary">Average Score</Typography>
+                    <Typography variant="h4" color="secondary">{analytics.summary.avgScore}%</Typography>
+                  </Card>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
+                    <Typography variant="body2" color="text.secondary">Pass Percentage</Typography>
+                    <Typography variant="h4" color="success.main">{analytics.summary.passPercentage}%</Typography>
+                  </Card>
+                </Grid>
+              </Grid>
+
+              <Typography variant="h6" gutterBottom>Grade Distribution Overview</Typography>
+              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 4 }}>
+                {Object.entries(analytics.gradeDistribution || {}).map(([grade, count]) => (
+                  <Chip key={grade} label={`${grade}: ${count}`} color={grade === 'F' ? 'error' : 'primary'} variant={count > 0 ? 'filled' : 'outlined'} />
+                ))}
+              </Box>
+
+              <Typography variant="h6" gutterBottom>Top 5 Students</Typography>
+              <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
+                <Table size="small">
+                  <TableHead sx={{ bgcolor: 'grey.100' }}>
+                    <TableRow>
+                      <TableCell>Rank</TableCell>
+                      <TableCell>Student</TableCell>
+                      <TableCell>Register No.</TableCell>
+                      <TableCell align="right">Percentage</TableCell>
+                      <TableCell align="center">Grade</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {(analytics.top10 || []).slice(0, 5).map((row, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell>#{row.rank}</TableCell>
+                        <TableCell>{row.name}</TableCell>
+                        <TableCell>{row.registerNo}</TableCell>
+                        <TableCell align="right">{row.percentage.toFixed(1)}%</TableCell>
+                        <TableCell align="center">
+                          <Chip label={row.grade} size="small" color={row.grade === 'F' ? 'error' : 'success'} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {(!analytics.top10 || analytics.top10.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={5} align="center">No results available</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          ) : (
+            <Alert severity="error">Failed to load analytics for this exam.</Alert>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setPublishModalOpen(false)} disabled={isPublishing} color="inherit">Cancel</Button>
+          <Button 
+            onClick={handleConfirmPublish} 
+            variant="contained" 
+            color="success"
+            disabled={isPublishing || analyticsLoading || !analytics}
+            startIcon={isPublishing ? <CircularProgress size={20} color="inherit" /> : <Send size={18} />}
+          >
+            {isPublishing ? 'Publishing...' : 'Confirm & Publish'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

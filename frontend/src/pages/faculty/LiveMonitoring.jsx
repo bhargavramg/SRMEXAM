@@ -5,16 +5,27 @@ import { useQuery } from '@tanstack/react-query';
 import axiosClient from '../../api/axiosClient';
 import PageHeader from '../../components/PageHeader';
 import { io } from 'socket.io-client';
+import { useRefresh } from '../../contexts/RefreshContext';
+import { useAutoRefresh } from '../../hooks/useAutoRefresh';
 
 const LiveMonitoring = () => {
   const { examId } = useParams();
   const [liveSessions, setLiveSessions] = useState([]);
   
   // Fetch initial data
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ['liveMonitoring', examId],
     queryFn: () => axiosClient.get(`/faculty/monitoring/${examId}`)
   });
+
+  const { registerRefreshHandler } = useRefresh();
+
+  useEffect(() => {
+    const unregister = registerRefreshHandler(refetch);
+    return () => unregister();
+  }, [registerRefreshHandler, refetch]);
+
+  useAutoRefresh(refetch, 5000);
 
   useEffect(() => {
     if (data?.sessions) {

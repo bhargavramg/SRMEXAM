@@ -24,7 +24,7 @@ const Dashboard = () => {
   const theme = useTheme();
   const navigate = useNavigate();
 
-  const { data, isLoading: loading, isError: error } = useQuery({
+  const { data, isLoading: loading, isError: error, refetch } = useQuery({
     queryKey: ['facultyDashboard'],
     queryFn: () => facultyApi.getDashboardData()
   });
@@ -50,7 +50,7 @@ const Dashboard = () => {
     return (
       <Box>
         <PageHeader title="Dashboard" subtitle="Welcome back, Faculty Member" />
-        <ErrorState message="Failed to load dashboard data" onRetry={() => window.location.reload()} />
+        <ErrorState message="Failed to load dashboard data" onRetry={() => refetch()} />
       </Box>
     );
   }
@@ -97,11 +97,11 @@ const Dashboard = () => {
                   <Grid item xs={12} key={assignment.id}>
                     <Card sx={{ height: '100%' }}>
                       <CardContent>
-                        <Typography variant="h6" color="primary">{assignment.subject.name}</Typography>
-                        <Typography variant="body2" color="text.secondary">Code: {assignment.subject.code}</Typography>
+                        <Typography variant="h6" color="primary">{assignment?.subject?.name || 'N/A'}</Typography>
+                        <Typography variant="body2" color="text.secondary">Code: {assignment?.subject?.code || 'N/A'}</Typography>
                         <Divider sx={{ my: 1 }} />
-                        <Typography variant="body2"><strong>Section:</strong> {assignment.section.name}</Typography>
-                        <Typography variant="body2"><strong>Semester:</strong> {assignment.section.semester.semesterNumber}</Typography>
+                        <Typography variant="body2"><strong>Assessment:</strong> {assignment.assessmentType?.name || 'N/A'}</Typography>
+                        <Typography variant="body2"><strong>Academic Year:</strong> {assignment.academicYear?.name || 'N/A'}</Typography>
                       </CardContent>
                     </Card>
                   </Grid>

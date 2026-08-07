@@ -170,8 +170,7 @@ exports.getSections = async (req, res) => {
   try {
     const sections = await prisma.section.findMany({
       include: {
-        semester: { include: { course: { include: { department: true } }, academicYear: true } },
-        _count: { select: { studentEnrollments: true } }
+        semester: { include: { course: { include: { department: true } }, academicYear: true } }
       }
     });
     res.json(sections);
@@ -285,24 +284,205 @@ exports.updateFaculty = async (req, res) => {
 // ============================================================================
 // STUDENT MANAGEMENT
 // ============================================================================
-exports.getStudentList = async (req, res) => {
+exports.getStudentStats = async (req, res) => {
   try {
-    const students = await prisma.user.findMany({
-      where: { role: 'STUDENT' },
-      select: {
-        id: true, name: true, email: true, register_no: true, departmentId: true, department: true, status: true, createdAt: true,
-        enrollments: {
-          where: { status: 'ACTIVE' },
-          include: {
-            course: true, semester: { include: { academicYear: true } }, section: true, academicYear: true
-          }
-        }
-      },
-      orderBy: { name: 'asc' }
-    });
-    res.json(students);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [total, active, inactive, importedToday] = await Promise.all([
+      prisma.user.count({ where: { role: 'STUDENT' } }),
+      prisma.user.count({ where: { role: 'STUDENT', status: 'ACTIVE' } }),
+      prisma.user.count({ where: { role: 'STUDENT', status: 'INACTIVE' } }),
+      prisma.user.count({ where: { role: 'STUDENT', createdAt: { gte: today } } })
+    ]);
+
+    res.json({ total, active, inactive, importedToday });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.getStudentList = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search = '', departmentId, courseId, semesterId, sectionId, status, sortBy = 'name', sortOrder = 'asc' } = req.query;
+    
+    const pageNumber = parseInt(page);
+    const limitNumber = parseInt(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    const where = { role: 'STUDENT' };
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { register_no: { contains: search, mode: 'insensitive' } }
+      ];
+    }
+
+    if (status) where.status = status;
+    if (departmentId) where.departmentId = departmentId;
+
+    if (courseId || semesterId || sectionId) {
+      where.assignments = {
+        some: {
+          ...(courseId && { courseId }),
+          ...(semesterId && { semesterId }),
+          ...(sectionId && { sectionId })
+        }
+      };
+    }
+
+    let orderBy = {};
+    if (sortBy === 'lastLogin') {
+      orderBy = {
+        browserSessions: {
+          _count: sortOrder
+        }
+      };
+    } else {
+      orderBy[sortBy] = sortOrder;
+    }
+
+    const [totalElements, students] = await Promise.all([
+      prisma.user.count({ where }),
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true, name: true, email: true, register_no: true, departmentId: true, department: true, status: true, createdAt: true,
+          assignments: {
+            where: { status: 'ACTIVE' },
+            include: {
+              assignment: {
+                include: { subject: true, academicYear: true, assessmentType: true, faculty: { select: { name: true } } }
+              }
+            }
+          },
+          browserSessions: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { createdAt: true }
+          }
+        },
+        orderBy,
+        skip,
+        take: limitNumber
+      })
+    ]);
+
+    const mappedStudents = students.map(s => {
+      const lastLogin = s.browserSessions.length > 0 ? s.browserSessions[0].createdAt : null;
+      return { ...s, lastLogin };
+    });
+
+    res.json({
+      content: mappedStudents,
+      totalElements,
+      totalPages: Math.ceil(totalElements / limitNumber),
+      page: pageNumber,
+      size: limitNumber
+    });
+  } catch (error) {
+    console.error('getStudentList error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.getStudentById = async (req, res) => {
+  try {
+    const student = await prisma.user.findUnique({
+      where: { id: req.params.id, role: 'STUDENT' },
+      include: {
+        department: true,
+        assignments: {
+          include: {
+            assignment: {
+              include: {
+                subject: true,
+                academicYear: true,
+                assessmentType: true,
+                faculty: { select: { name: true, email: true } }
+              }
+            }
+          }
+        },
+        results: {
+          include: {
+            exam: true
+          }
+        },
+        browserSessions: {
+          orderBy: { createdAt: 'desc' },
+          take: 1
+        }
+      }
+    });
+
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+
+    // Extract subjects from assignments
+    const assignedSubjects = student.assignments
+      .filter(a => a.status === 'ACTIVE')
+      .map(a => a.assignment);
+
+    res.json({ ...student, assignedSubjects });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.deleteStudent = async (req, res) => {
+  try {
+    // Check if student has results
+    const resultsCount = await prisma.result.count({ where: { studentId: req.params.id } });
+    if (resultsCount > 0) {
+      return res.status(400).json({ error: 'Student has historical examination records and cannot be permanently deleted. You may deactivate the account instead.' });
+    }
+
+    // Delete related assignments first
+    await prisma.assignmentStudent.deleteMany({ where: { studentId: req.params.id } });
+    await prisma.browserSession.deleteMany({ where: { userId: req.params.id } });
+    await prisma.activityLog.deleteMany({ where: { userId: req.params.id } });
+    
+    await prisma.user.delete({ where: { id: req.params.id } });
+    
+    res.json({ message: 'Student successfully deleted.' });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error while deleting student.' });
+  }
+};
+
+exports.importStudents = async (req, res) => {
+  try {
+    const { students } = req.body;
+    if (!students || !Array.isArray(students)) return res.status(400).json({ error: 'Invalid students data' });
+
+    const createdStudents = [];
+    for (const data of students) {
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(data.password || 'password123', salt);
+      
+      const newStudent = await prisma.user.create({
+        data: {
+          name: data.name,
+          email: data.email,
+          register_no: data.register_no,
+          password: hashedPassword,
+          role: 'STUDENT',
+          departmentId: data.departmentId,
+          phone: data.phone,
+          assignments: {
+            create: data.courseId && data.semesterId && data.sectionId && data.academicYearId ? [{
+              courseId: data.courseId, semesterId: data.semesterId, sectionId: data.sectionId, academicYearId: data.academicYearId, status: 'ACTIVE'
+            }] : []
+          }
+        }
+      });
+      createdStudents.push(newStudent);
+    }
+    res.json({ message: `${createdStudents.length} students imported successfully.`, students: createdStudents });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 };
 
@@ -315,13 +495,13 @@ exports.createStudent = async (req, res) => {
     const student = await prisma.user.create({
       data: {
         name, email, register_no, password: hashedPassword, role: 'STUDENT', departmentId, phone,
-        enrollments: {
+        assignments: {
           create: courseId && semesterId && sectionId && academicYearId ? [{
             courseId, semesterId, sectionId, academicYearId, status: 'ACTIVE'
           }] : []
         }
       },
-      include: { enrollments: true }
+      include: { assignments: true }
     });
     res.status(201).json({ id: student.id, name: student.name, email: student.email, register_no: student.register_no });
   } catch (error) {
@@ -351,9 +531,7 @@ exports.getFacultyAssignments = async (req, res) => {
     const assignments = await prisma.facultyAssignment.findMany({
       include: {
         faculty: { select: { id: true, name: true, email: true, employeeId: true } },
-        subject: true,
-        section: { include: { semester: { include: { course: { include: { department: true } }, academicYear: true } } } },
-        academicYear: true,
+        subject: { include: { department: true } }, assessmentType: true, academicYear: true,
         _count: { select: { exams: true } }
       },
       orderBy: { createdAt: 'desc' }
@@ -366,10 +544,17 @@ exports.getFacultyAssignments = async (req, res) => {
 
 exports.createFacultyAssignment = async (req, res) => {
   try {
-    const { facultyId, subjectId, sectionId, academicYearId, teachingType } = req.body;
+    const { facultyId, subjectId, assessmentTypeId, academicYearId } = req.body;
+
     const assignment = await prisma.facultyAssignment.create({
-      data: { facultyId, subjectId, sectionId, academicYearId, teachingType: teachingType || 'THEORY', status: 'ACTIVE' },
-      include: { faculty: { select: { name: true } }, subject: true, section: true }
+      data: {
+        facultyId,
+        subjectId,
+        assessmentTypeId,
+        academicYearId: academicYearId || null,
+        status: 'ACTIVE'
+      },
+      include: { faculty: { select: { name: true } }, subject: true, assessmentType: true, academicYear: true }
     });
     res.status(201).json(assignment);
   } catch (error) {
@@ -391,50 +576,55 @@ exports.deleteFacultyAssignment = async (req, res) => {
     await prisma.facultyAssignment.delete({ where: { id: req.params.id } });
     res.json({ message: 'Faculty assignment deleted' });
   } catch (error) {
+    console.error('Delete Faculty Assignment Error:', error);
     res.status(400).json({ error: 'Cannot delete assignment with existing exams' });
   }
 };
 
 // ============================================================================
-// STUDENT ENROLLMENT MANAGEMENT
+// ASSESSMENT TYPES MANAGEMENT
 // ============================================================================
-exports.getStudentEnrollments = async (req, res) => {
+exports.getAssessmentTypes = async (req, res) => {
   try {
-    const enrollments = await prisma.studentEnrollment.findMany({
-      include: {
-        student: { select: { id: true, name: true, email: true, register_no: true } },
-        course: true,
-        semester: true,
-        section: true,
-        academicYear: true
-      },
+    const assessments = await prisma.assessmentType.findMany({
       orderBy: { createdAt: 'desc' }
     });
-    res.json(enrollments);
+    res.json(assessments);
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
 
-exports.createStudentEnrollment = async (req, res) => {
+exports.createAssessmentType = async (req, res) => {
   try {
-    const { studentId, courseId, semesterId, sectionId, academicYearId } = req.body;
-    const enrollment = await prisma.studentEnrollment.create({
-      data: { studentId, courseId, semesterId, sectionId, academicYearId, status: 'ACTIVE' },
-      include: { student: { select: { name: true } }, course: true, section: true }
+    const { name, description, status } = req.body;
+    const assessment = await prisma.assessmentType.create({
+      data: { name, description, status: status || 'ACTIVE' }
     });
-    res.status(201).json(enrollment);
+    res.status(201).json(assessment);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 };
 
-exports.updateStudentEnrollment = async (req, res) => {
+exports.updateAssessmentType = async (req, res) => {
   try {
-    const enrollment = await prisma.studentEnrollment.update({ where: { id: req.params.id }, data: req.body });
-    res.json(enrollment);
+    const assessment = await prisma.assessmentType.update({
+      where: { id: req.params.id },
+      data: req.body
+    });
+    res.json(assessment);
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+};
+
+exports.deleteAssessmentType = async (req, res) => {
+  try {
+    await prisma.assessmentType.delete({ where: { id: req.params.id } });
+    res.json({ message: 'Assessment type deleted' });
+  } catch (error) {
+    res.status(400).json({ error: 'Cannot delete assessment type linked to faculty assignments' });
   }
 };
 
@@ -443,20 +633,246 @@ exports.updateStudentEnrollment = async (req, res) => {
 // ============================================================================
 exports.getDashboardData = async (req, res) => {
   try {
-    const [departments, courses, faculty, students, exams, activeYear] = await Promise.all([
+    const [
+      departments, faculty, students, subjects, 
+      totalExams, activeExams, completedExams, pendingEvals, publishedResults
+    ] = await Promise.all([
       prisma.department.count(),
-      prisma.course.count(),
       prisma.user.count({ where: { role: 'FACULTY' } }),
       prisma.user.count({ where: { role: 'STUDENT' } }),
+      prisma.subject.count(),
       prisma.exam.count(),
-      prisma.academicYear.findFirst({ where: { isCurrent: true } })
+      prisma.exam.count({ where: { status: 'ACTIVE' } }),
+      prisma.exam.count({ where: { status: 'COMPLETED' } }),
+      prisma.exam.count({ where: { status: 'EVALUATION' } }),
+      prisma.exam.count({ where: { status: 'CLOSED' } })
     ]);
 
     res.json({
-      stats: { departments, courses, faculty, students, exams },
-      activeAcademicYear: activeYear
+      stats: {
+        departments,
+        faculty,
+        students,
+        subjects,
+        exams: totalExams,
+        activeExams,
+        completedExams,
+        pendingEvaluations: pendingEvals,
+        resultsPublished: publishedResults
+      }
     });
   } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// ============================================================================
+// UNIVERSITY-WIDE EXAMS & RESULTS
+// ============================================================================
+exports.getExams = async (req, res) => {
+  try {
+    const exams = await prisma.exam.findMany({
+      include: {
+        facultyAssignment: {
+          include: {
+            subject: true,
+            academicYear: true,
+            assessmentType: true,
+            faculty: { select: { name: true, employeeId: true } }
+          }
+        },
+        _count: { select: { sessions: true, results: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(exams);
+  } catch (error) {
+    console.error('getExams error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.getResults = async (req, res) => {
+  try {
+    const results = await prisma.result.findMany({
+      include: {
+        student: { select: { name: true, register_no: true } },
+        exam: { select: { title: true } }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 500 // Limit for performance
+    });
+    res.json(results);
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// ============================================================================
+// AUDIT LOGS
+// ============================================================================
+exports.getAuditLogs = async (req, res) => {
+  try {
+    const logs = await prisma.activityLog.findMany({
+      include: {
+        user: { select: { name: true, email: true } },
+        exam: { select: { title: true } }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 1000
+    });
+    res.json(logs);
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.getFacultyById = async (req, res) => {
+  try {
+    const faculty = await prisma.user.findUnique({
+      where: { id: req.params.id, role: 'FACULTY' },
+      include: {
+        facultyAssignments: {
+          include: { 
+            subject: true,
+            assessmentType: true,
+            academicYear: true,
+            _count: { select: { exams: true, students: true } }
+          }
+        },
+        department: true
+      }
+    });
+    if (!faculty) return res.status(404).json({ error: 'Faculty not found' });
+    res.json(faculty);
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+
+exports.createFaculty = async (req, res) => {
+  try {
+    const { name, email, employeeId, phone, departmentId, password } = req.body;
+    
+    // Check existing
+    const existing = await prisma.user.findFirst({
+      where: { OR: [{ email }, { employeeId }] }
+    });
+    if (existing) return res.status(400).json({ error: 'Email or Employee ID already exists' });
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password || employeeId, salt);
+
+    const faculty = await prisma.user.create({
+      data: {
+        name, email, employeeId, phone, departmentId,
+        password: hashedPassword,
+        role: 'FACULTY',
+        firstLogin: true
+      }
+    });
+    res.status(201).json(faculty);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.updateFaculty = async (req, res) => {
+  try {
+    const { name, email, phone, departmentId, status } = req.body;
+    const faculty = await prisma.user.update({
+      where: { id: req.params.id },
+      data: { name, email, phone, departmentId, status }
+    });
+    res.json(faculty);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.resetFacultyPassword = async (req, res) => {
+  try {
+    const faculty = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!faculty) return res.status(404).json({ error: 'Faculty not found' });
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(faculty.employeeId, salt);
+
+    await prisma.user.update({
+      where: { id: req.params.id },
+      data: { password: hashedPassword, firstLogin: true }
+    });
+    res.json({ message: 'Password reset successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.deleteFaculty = async (req, res) => {
+  try {
+    // Check for assignments
+    const assignments = await prisma.facultyAssignment.count({ where: { facultyId: req.params.id } });
+    if (assignments > 0) return res.status(400).json({ error: 'Cannot delete faculty with existing assignments' });
+
+    await prisma.user.delete({ where: { id: req.params.id } });
+    res.json({ message: 'Faculty deleted' });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// ============================================================================
+// ADMIN RESULT UNLOCK
+// ============================================================================
+exports.unlockResults = async (req, res) => {
+  try {
+    const { examId } = req.params;
+    const exam = await prisma.exam.findUnique({ where: { id: examId } });
+    if (!exam) return res.status(404).json({ error: 'Exam not found' });
+
+    // Update all results for this exam
+    await prisma.result.updateMany({
+      where: { examId, status: 'PUBLISHED' },
+      data: {
+        status: 'EVALUATED',
+        published: false,
+        publishedAt: null
+      }
+    });
+
+    // Reset exam status to EVALUATION
+    await prisma.exam.update({
+      where: { id: examId },
+      data: { status: 'EVALUATION' }
+    });
+
+    // Notify faculty (optional, but good practice)
+    await prisma.notification.create({
+      data: {
+        userId: req.user.id, // Admin
+        type: 'SYSTEM',
+        title: 'Results Unlocked',
+        message: `Admin unlocked results for exam ${exam.title}.`
+      }
+    });
+    
+    // Log Activity
+    await prisma.activityLog.create({
+      data: {
+        userId: req.user.id,
+        role: 'ADMIN',
+        examId,
+        action: 'RESULTS_UNLOCKED',
+        details: 'Admin forced unlock of results for re-evaluation',
+        ipAddress: req.ip,
+        browser: req.headers['user-agent']
+      }
+    });
+
+    res.json({ success: true, message: 'Results unlocked successfully. Faculty can now edit marks.' });
+  } catch (error) {
+    console.error('unlockResults error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

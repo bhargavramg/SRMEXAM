@@ -10,6 +10,7 @@ import {
   Menu as MenuIcon,
   Dashboard as DashboardIcon,
   LibraryBooks as QuestionBankIcon,
+  PeopleAlt as StudentIcon,
   AddCircleOutlined as CreateExamIcon,
   SettingsApplications as ManageExamsIcon,
   Category as CategoryIcon,
@@ -23,6 +24,7 @@ import {
   ExitToApp as LogoutIcon
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
+import TopNavbar from '../components/layout/TopNavbar';
 
 const drawerWidth = 280;
 
@@ -57,6 +59,7 @@ const FacultyLayout = () => {
   const menuItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/faculty/dashboard' },
     { text: 'Question Bank', icon: <QuestionBankIcon />, path: '/faculty/question-bank' },
+    { text: 'Student Management', icon: <StudentIcon />, path: '/faculty/students' },
     { text: 'Create Exam', icon: <CreateExamIcon />, path: '/faculty/create-exam' },
     { text: 'Manage Exams', icon: <ManageExamsIcon />, path: '/faculty/exams' },
     { text: 'Question Categories', icon: <CategoryIcon />, path: '/faculty/categories' },
@@ -162,63 +165,7 @@ const FacultyLayout = () => {
   return (
     <Box sx={{ display: 'flex', bgcolor: '#F5F7FA', minHeight: '100vh' }}>
       {/* App Bar */}
-      <AppBar
-        position="fixed"
-        elevation={0}
-        sx={{
-          width: { md: `calc(100% - ${drawerWidth}px)` },
-          ml: { md: `${drawerWidth}px` },
-          bgcolor: 'white',
-          color: 'text.primary',
-          borderBottom: '1px solid',
-          borderColor: 'divider'
-        }}
-      >
-        <Toolbar>
-          <IconButton
-            color="inherit"
-            aria-label="open drawer"
-            edge="start"
-            onClick={handleDrawerToggle}
-            sx={{ mr: 2, display: { md: 'none' } }}
-          >
-            <MenuIcon />
-          </IconButton>
-          
-          <Box sx={{ flexGrow: 1 }} />
-          
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <IconButton color="primary">
-              <Badge badgeContent={3} color="error">
-                <NotificationsIcon />
-              </Badge>
-            </IconButton>
-            
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }} onClick={handleMenu}>
-              <Box sx={{ textAlign: 'right', display: { xs: 'none', sm: 'block' } }}>
-                <Typography variant="subtitle2" fontWeight={600}>{user?.name || 'Faculty Member'}</Typography>
-                <Typography variant="caption" color="text.secondary">Department of {user?.department?.code || 'CSE'}</Typography>
-              </Box>
-              <Avatar sx={{ bgcolor: 'primary.main', width: 40, height: 40 }}>
-                {user?.name?.charAt(0) || 'F'}
-              </Avatar>
-            </Box>
-            
-            <Menu
-              anchorEl={anchorEl}
-              open={Boolean(anchorEl)}
-              onClose={handleClose}
-              transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-              anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-            >
-              <MenuItem onClick={() => { handleClose(); navigate('/faculty/profile'); }}>Profile</MenuItem>
-              <MenuItem onClick={() => { handleClose(); navigate('/faculty/settings'); }}>Settings</MenuItem>
-              <Divider />
-              <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>Logout</MenuItem>
-            </Menu>
-          </Box>
-        </Toolbar>
-      </AppBar>
+      <TopNavbar onMenuClick={handleDrawerToggle} isMobile={isMobile} role="Faculty Member" />
 
       {/* Sidebar Navigation */}
       <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>

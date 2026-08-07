@@ -44,8 +44,11 @@ async function getFacultyAssignmentIds(facultyId) {
 // ============================================================================
 // FACULTY DASHBOARD
 // ============================================================================
+const { updateGlobalExamStatuses } = require('../utils/examLifecycle');
+
 exports.getDashboardData = async (req, res) => {
   try {
+    await updateGlobalExamStatuses();
     const facultyId = req.user.id;
     const now = new Date();
 
@@ -53,49 +56,30 @@ exports.getDashboardData = async (req, res) => {
       where: { facultyId, status: 'ACTIVE' },
       include: {
         subject: true,
-        section: { include: { semester: { include: { course: true } } } }
+        assessmentType: true,
+        academicYear: true
       }
     });
     const assignmentIds = assignments.map(a => a.id);
 
-    const totalExams = await prisma.exam.count({
-      where: { facultyAssignmentId: { in: assignmentIds } }
+    const upcomingExamsCount = await prisma.exam.count({
+      where: { facultyAssignmentId: { in: assignmentIds }, status: 'SCHEDULED' }
     });
 
-    const activeExams = await prisma.exam.count({
-      where: {
-        facultyAssignmentId: { in: assignmentIds },
-        status: 'PUBLISHED',
-        startTime: { lte: now },
-        endTime: { gte: now }
-      }
+    const activeExamsCount = await prisma.exam.count({
+      where: { facultyAssignmentId: { in: assignmentIds }, status: 'ACTIVE' }
     });
 
-    const upcomingExams = await prisma.exam.findMany({
-      where: {
-        facultyAssignmentId: { in: assignmentIds },
-        status: 'PUBLISHED',
-        startTime: { gt: now }
-      },
-      include: {
-        facultyAssignment: {
-          include: { subject: true, section: { include: { semester: { include: { course: true } } } } }
-        }
-      },
-      orderBy: { startTime: 'asc' },
-      take: 5
+    const pendingEvals = await prisma.exam.count({
+      where: { facultyAssignmentId: { in: assignmentIds }, status: 'EVALUATION' }
     });
 
-    const draftExams = await prisma.exam.count({
-      where: {
-        facultyAssignmentId: { in: assignmentIds },
-        status: 'DRAFT'
-      }
+    const publishedResults = await prisma.exam.count({
+      where: { facultyAssignmentId: { in: assignmentIds }, status: 'CLOSED' }
     });
 
-    const sectionIds = [...new Set(assignments.map(a => a.sectionId))];
-    const totalStudents = await prisma.studentEnrollment.count({
-      where: { sectionId: { in: sectionIds }, status: 'ACTIVE' }
+    const totalStudents = await prisma.assignmentStudent.count({
+      where: { assignmentId: { in: assignmentIds }, status: 'ACTIVE' }
     });
 
     const recentActivity = await prisma.activityLog.findMany({
@@ -109,9 +93,15 @@ exports.getDashboardData = async (req, res) => {
     });
 
     res.json({
-      stats: { totalExams, activeExams, draftExams, totalStudents, upcomingCount: upcomingExams.length },
+      stats: {
+        totalAssignments: assignments.length,
+        totalStudents,
+        upcomingExams: upcomingExamsCount,
+        activeExams: activeExamsCount,
+        pendingEvaluations: pendingEvals,
+        publishedResults
+      },
       assignments,
-      upcomingExams,
       recentActivity
     });
   } catch (error) {
@@ -128,14 +118,14 @@ exports.getMyAssignments = async (req, res) => {
     const assignments = await prisma.facultyAssignment.findMany({
       where: { facultyId: req.user.id, status: 'ACTIVE' },
       include: {
-        subject: true,
-        section: { include: { semester: { include: { course: { include: { department: true } }, academicYear: true } } } },
+        subject: { include: { department: true } },
         academicYear: true,
         _count: { select: { exams: true } }
       }
     });
     res.json(assignments);
   } catch (error) {
+    console.error('getMyAssignments error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -153,7 +143,7 @@ exports.getExams = async (req, res) => {
         facultyAssignment: {
           include: {
             subject: true,
-            section: { include: { semester: { include: { course: true } } } }
+            
           }
         },
         config: true,
@@ -176,7 +166,7 @@ exports.getExam = async (req, res) => {
         facultyAssignment: {
           include: {
             subject: true,
-            section: { include: { semester: { include: { course: true, academicYear: true } } } }
+            
           }
         },
         config: true,
@@ -197,11 +187,17 @@ exports.getExam = async (req, res) => {
 
 exports.createExam = async (req, res) => {
   try {
-    const { title, facultyAssignmentId, durationMins, passingMarks, totalMarks, instructions, questionIds, config, startTime, endTime } = req.body;
+    const { title, facultyAssignmentId, durationMins, passingMarks, totalMarks, instructions, questionIds, config, startTime, endTime, assignedStudentIds } = req.body;
 
     const assignment = await prisma.facultyAssignment.findUnique({ where: { id: facultyAssignmentId } });
     if (!assignment || assignment.facultyId !== req.user.id) {
-      return res.status(403).json({ error: 'You are not assigned to this subject/section' });
+      return res.status(403).json({ error: 'You are not assigned to this subject' });
+    }
+
+    let studentIdsToAssign = assignedStudentIds || [];
+    if (studentIdsToAssign.length === 0) {
+      const allAssigned = await prisma.assignmentStudent.findMany({ where: { assignmentId: facultyAssignmentId, status: 'ACTIVE' } });
+      studentIdsToAssign = allAssigned.map(a => a.studentId);
     }
 
     const exam = await prisma.exam.create({
@@ -218,10 +214,13 @@ exports.createExam = async (req, res) => {
         examQuestions: questionIds ? {
           create: questionIds.map((qId, idx) => ({ questionId: qId, orderIndex: idx + 1 }))
         } : undefined,
-        config: config ? { create: config } : { create: {} }
+        config: config ? { create: config } : { create: {} },
+        examStudents: {
+          create: studentIdsToAssign.map(studentId => ({ studentId, assignedBy: req.user.id }))
+        }
       },
       include: {
-        facultyAssignment: { include: { subject: true, section: true } },
+        facultyAssignment: { include: { subject: true,  } },
         config: true,
         _count: { select: { examQuestions: true } }
       }
@@ -276,8 +275,8 @@ exports.deleteExam = async (req, res) => {
     if (!exam || exam.facultyAssignment.facultyId !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
     }
-    if (exam.status === 'PUBLISHED' || exam.status === 'ACTIVE') {
-      return res.status(400).json({ error: 'Cannot delete a published or active exam' });
+    if (exam.status !== 'DRAFT') {
+      return res.status(400).json({ error: 'Cannot delete an exam once it has been published or scheduled' });
     }
 
     await prisma.exam.delete({ where: { id: req.params.id } });
@@ -297,7 +296,7 @@ exports.publishExam = async (req, res) => {
       include: {
         facultyAssignment: {
           include: {
-            section: { include: { semester: true } },
+            
             subject: true
           }
         }
@@ -310,26 +309,37 @@ exports.publishExam = async (req, res) => {
     }
 
     const { startTime, endTime } = req.body;
+    
+    const finalStartTime = startTime ? new Date(startTime) : exam.startTime;
+    const finalEndTime = endTime ? new Date(endTime) : exam.endTime;
+    const now = new Date();
+    
+    let newStatus = 'SCHEDULED';
+    if (finalStartTime && finalStartTime <= now) {
+      newStatus = 'ACTIVE';
+    }
+    if (finalEndTime && finalEndTime <= now) {
+      newStatus = 'COMPLETED';
+    }
 
     const updatedExam = await prisma.exam.update({
       where: { id: req.params.id },
       data: {
-        status: 'PUBLISHED',
-        startTime: startTime ? new Date(startTime) : exam.startTime,
-        endTime: endTime ? new Date(endTime) : exam.endTime
+        status: newStatus,
+        startTime: finalStartTime,
+        endTime: finalEndTime
       }
     });
 
-    const sectionId = exam.facultyAssignment.sectionId;
-    const enrollments = await prisma.studentEnrollment.findMany({
-      where: { sectionId, status: 'ACTIVE' },
+    const examStudents = await prisma.examStudent.findMany({
+      where: { examId: exam.id },
       select: { studentId: true }
     });
 
-    if (enrollments.length > 0) {
+    if (examStudents.length > 0) {
       await prisma.notification.createMany({
-        data: enrollments.map(e => ({
-          userId: e.studentId,
+        data: examStudents.map(es => ({
+          userId: es.studentId,
           examId: exam.id,
           type: 'EXAM_PUBLISHED',
           title: 'New Exam Published',
@@ -339,8 +349,8 @@ exports.publishExam = async (req, res) => {
 
       const io = req.app.get('io');
       if (io) {
-        enrollments.forEach(e => {
-          io.to(`user_${e.studentId}`).emit('notification', {
+        examStudents.forEach(es => {
+          io.to(`user_${es.studentId}`).emit('notification', {
             type: 'EXAM_PUBLISHED',
             title: 'New Exam Published',
             message: `${exam.title} has been published`,
@@ -350,7 +360,7 @@ exports.publishExam = async (req, res) => {
       }
     }
 
-    res.json({ ...updatedExam, notifiedStudents: enrollments.length });
+    res.json({ ...updatedExam, notifiedStudents: examStudents.length });
   } catch (error) {
     console.error('publishExam error:', error);
     res.status(400).json({ error: error.message });
@@ -464,7 +474,7 @@ exports.getLiveMonitoringData = async (req, res) => {
       where: { id: examId },
       include: {
         facultyAssignment: {
-          include: { subject: true, section: { include: { semester: { include: { course: { include: { department: true } } } } } } }
+          include: { subject: true,  }
         }
       }
     });
@@ -483,7 +493,7 @@ exports.getLiveMonitoringData = async (req, res) => {
             department: { select: { code: true } },
             enrollments: {
               where: { status: 'ACTIVE' },
-              include: { course: true, semester: true, section: true }
+              include: { course: true, semester: true,  }
             }
           }
         },
@@ -508,7 +518,7 @@ exports.getResultsDashboard = async (req, res) => {
     const exams = await prisma.exam.findMany({
       where: { facultyAssignmentId: { in: assignmentIds } },
       include: {
-        facultyAssignment: { include: { subject: true, section: { include: { semester: true } } } },
+        facultyAssignment: { include: { subject: true,  } },
         _count: { select: { results: true, sessions: true } }
       },
       orderBy: { createdAt: 'desc' }
@@ -549,8 +559,8 @@ exports.getResultsDashboard = async (req, res) => {
         title: e.title,
         subject: e.facultyAssignment.subject.name,
         subjectCode: e.facultyAssignment.subject.code,
-        section: e.facultyAssignment.section.name,
-        semester: e.facultyAssignment.section.semester.semesterNumber,
+        section: '-',
+        semester: '-',
         status: e.status,
         totalSubmissions: e._count.results,
         totalSessions: e._count.sessions,
@@ -578,7 +588,7 @@ exports.getExamSubmissions = async (req, res) => {
         facultyAssignment: {
           include: {
             subject: true,
-            section: { include: { semester: { include: { course: { include: { department: true } } } } } },
+            
             faculty: { select: { name: true } }
           }
         }
@@ -599,7 +609,7 @@ exports.getExamSubmissions = async (req, res) => {
             department: { select: { name: true, code: true } },
             enrollments: {
               where: { status: 'ACTIVE' },
-              include: { section: true, semester: true }
+              include: {  semester: true }
             }
           }
         },
@@ -632,7 +642,7 @@ exports.getExamSubmissions = async (req, res) => {
         email: session.student.email,
         department: session.student.department?.name,
         departmentCode: session.student.department?.code,
-        section: session.student.enrollments[0]?.section?.name || '-',
+        section: '-',
         semester: session.student.enrollments[0]?.semester?.semesterNumber || '-',
         submittedAt: session.submittedAt,
         timeTaken: session.timeTaken,
@@ -674,7 +684,7 @@ exports.getSubmissionDetail = async (req, res) => {
             facultyAssignment: {
               include: {
                 subject: true,
-                section: { include: { semester: { include: { course: { include: { department: true } } } } } },
+                
                 faculty: { select: { name: true } }
               }
             }
@@ -686,7 +696,7 @@ exports.getSubmissionDetail = async (req, res) => {
             department: { select: { name: true, code: true } },
             enrollments: {
               where: { status: 'ACTIVE' },
-              include: { section: true, semester: true }
+              include: {  semester: true }
             }
           }
         },
@@ -751,7 +761,7 @@ exports.getSubmissionDetail = async (req, res) => {
         email: session.student.email,
         department: session.student.department?.name,
         departmentCode: session.student.department?.code,
-        section: session.student.enrollments[0]?.section?.name || '-',
+        section: '-',
         semester: session.student.enrollments[0]?.semester?.semesterNumber || '-',
       },
       exam: {
@@ -1296,7 +1306,7 @@ exports.exportResults = async (req, res) => {
             department: { select: { name: true } },
             enrollments: {
               where: { status: 'ACTIVE' },
-              include: { section: true, semester: true }
+              include: {  semester: true }
             }
           }
         }
@@ -1310,7 +1320,7 @@ exports.exportResults = async (req, res) => {
       r.student.register_no || '',
       r.student.name,
       r.student.department?.name || '',
-      r.student.enrollments[0]?.section?.name || '',
+      '-',
       r.student.enrollments[0]?.semester?.semesterNumber || '',
       r.objectiveMarks,
       r.descriptiveMarks,
@@ -1343,7 +1353,7 @@ exports.getResults = async (req, res) => {
     const results = await prisma.result.findMany({
       where: { exam: { facultyAssignmentId: { in: assignmentIds } } },
       include: {
-        exam: { include: { facultyAssignment: { include: { subject: true, section: true } } } },
+        exam: { include: { facultyAssignment: { include: { subject: true,  } } } },
         student: { select: { name: true, register_no: true, email: true } }
       },
       orderBy: { createdAt: 'desc' }
@@ -1353,3 +1363,88 @@ exports.getResults = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+// ============================================================================
+// STUDENT MANAGEMENT (PLACEHOLDERS)
+// ============================================================================
+exports.getStudents = async (req, res) => {
+  try {
+    const assignmentIds = await getFacultyAssignmentIds(req.user.id);
+    
+    const assignmentStudents = await prisma.assignmentStudent.findMany({
+      where: { assignmentId: { in: assignmentIds } },
+      include: {
+        student: { 
+          select: { id: true, name: true, email: true, register_no: true, status: true, firstLogin: true, createdAt: true, phone: true } 
+        },
+        assignment: { 
+          include: { 
+            subject: { include: { department: true } }
+          } 
+        }
+      }
+    });
+
+    const students = assignmentStudents.map(as => {
+      const s = { ...as.student };
+      s.subject = as.assignment.subject;
+      s.enrollment = {
+        course: { department: as.assignment.subject.department }
+      };
+      return s;
+    });
+
+    // Remove duplicates if a student appears in multiple assignments, or keep them if we want to show multiple subjects.
+    // Let's keep them so the faculty sees the student per subject.
+    res.json(students);
+  } catch (error) {
+    console.error('getStudents Error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+exports.exportStudents = async (req, res) => res.status(501).json({ error: 'Not implemented' });
+exports.importStudents = async (req, res) => res.status(501).json({ error: 'Not implemented' });
+exports.getStudentById = async (req, res) => res.status(501).json({ error: 'Not implemented' });
+exports.createStudent = async (req, res) => res.status(501).json({ error: 'Not implemented' });
+exports.updateStudent = async (req, res) => res.status(501).json({ error: 'Not implemented' });
+exports.resetStudentPassword = async (req, res) => res.status(501).json({ error: 'Not implemented' });
+exports.updateStudentStatus = async (req, res) => res.status(501).json({ error: 'Not implemented' });
+exports.deleteStudent = async (req, res) => res.status(501).json({ error: 'Not implemented' });
+exports.getAssignmentStudents = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const assignmentIds = await getFacultyAssignmentIds(req.user.id);
+    
+    if (!assignmentIds.includes(id)) {
+      return res.status(403).json({ error: 'You are not authorized to view this assignment' });
+    }
+
+    const assignmentStudents = await prisma.assignmentStudent.findMany({
+      where: { assignmentId: id, status: 'ACTIVE' },
+      include: {
+        student: { 
+          select: { id: true, name: true, email: true, register_no: true, status: true, firstLogin: true, createdAt: true, phone: true } 
+        }
+      }
+    });
+
+    const students = assignmentStudents.map(as => as.student);
+    res.json(students);
+  } catch (error) {
+    console.error('getAssignmentStudents Error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// ============================================================================
+// OTHER MISSING PLACEHOLDERS
+// ============================================================================
+exports.getCategories = async (req, res) => res.status(501).json({ error: 'Not implemented' });
+exports.getCategory = async (req, res) => res.status(501).json({ error: 'Not implemented' });
+exports.createCategory = async (req, res) => res.status(501).json({ error: 'Not implemented' });
+exports.updateCategory = async (req, res) => res.status(501).json({ error: 'Not implemented' });
+exports.deleteCategory = async (req, res) => res.status(501).json({ error: 'Not implemented' });
+exports.getCategoryAnalytics = async (req, res) => res.status(501).json({ error: 'Not implemented' });
+exports.importQuestionsBulk = async (req, res) => res.status(501).json({ error: 'Not implemented' });
+exports.getPublishReadyExams = async (req, res) => res.status(501).json({ error: 'Not implemented' });
+exports.unpublishResults = async (req, res) => res.status(501).json({ error: 'Not implemented' });

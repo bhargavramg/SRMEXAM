@@ -1,5 +1,6 @@
 import React from 'react';
-import { Box, Typography, TextField, Button, Checkbox, FormControlLabel, Paper } from '@mui/material';
+import { Box, Typography, TextField, Button, Checkbox, FormControlLabel, Paper, IconButton, InputAdornment, Tooltip } from '@mui/material';
+import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { BookOpen, ArrowRight, GraduationCap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,6 +12,7 @@ const Login = () => {
   const [password, setPassword] = React.useState('');
   const [error, setError] = React.useState('');
   const [rememberMe, setRememberMe] = React.useState(true);
+  const [showPassword, setShowPassword] = React.useState(false);
 
   React.useEffect(() => {
     const savedEmail = localStorage.getItem('rememberedEmail');
@@ -30,13 +32,15 @@ const Login = () => {
         localStorage.removeItem('rememberedEmail');
       }
 
-      const user = await login({ identifier: email, password });
+      const user = await login({ identifier: email, password, rememberMe });
       if (user.role === 'STUDENT') {
          navigate('/student/dashboard');
       } else if (user.role === 'FACULTY') {
          navigate('/faculty/dashboard');
+      } else if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+         navigate('/admin/dashboard');
       } else {
-         navigate('/student/dashboard');
+         navigate('/');
       }
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to log in. Please check your credentials.');
@@ -136,13 +140,31 @@ const Login = () => {
             <TextField
               fullWidth
               label="Password"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               variant="outlined"
               margin="normal"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               sx={{ mb: 2 }}
+              slotProps={{
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <Tooltip title={showPassword ? "Hide Password" : "Show Password"}>
+                        <IconButton
+                          aria-label={showPassword ? "Hide Password" : "Show Password"}
+                          onClick={() => setShowPassword(!showPassword)}
+                          onMouseDown={(e) => e.preventDefault()}
+                          edge="end"
+                        >
+                          {showPassword ? <VisibilityOff /> : <Visibility />}
+                        </IconButton>
+                      </Tooltip>
+                    </InputAdornment>
+                  )
+                }
+              }}
             />
             
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>

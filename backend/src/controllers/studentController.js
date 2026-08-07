@@ -1,5 +1,6 @@
 const prisma = require('../utils/db');
 const { z } = require('zod');
+const { updateGlobalExamStatuses } = require('../utils/examLifecycle');
 
 // ============================================================================
 // GRADE CALCULATION HELPER
@@ -47,62 +48,93 @@ function isObjectiveType(type) {
 // ============================================================================
 exports.getDashboardData = async (req, res) => {
   try {
+    await updateGlobalExamStatuses();
     const studentId = req.user.id;
     const now = new Date();
 
-    const enrollment = await prisma.studentEnrollment.findFirst({
+    const enrollment = await prisma.assignmentStudent.findFirst({
       where: { studentId, status: 'ACTIVE' },
       include: {
-        course: { include: { department: true } },
-        semester: true,
-        section: true,
-        academicYear: true
+        assignment: {
+          include: { subject: { include: { department: true } }, assessmentType: true, academicYear: true }
+        }
       }
     });
 
-    if (!enrollment) {
-      return res.json({
-        stats: { completedExams: 0, avgScore: 0, upcomingExams: 0, activeExams: 0 },
-        activeExams: [],
-        upcomingExams: [],
-        enrollment: null,
-        user: { name: req.user.name || '', email: req.user.email || '' }
-      });
-    }
+    const assignmentIds = await getStudentAssignmentIds(studentId);
 
-    const assignmentIds = (await prisma.facultyAssignment.findMany({
+    // Todays Exams: SCHEDULED or ACTIVE with startTime today
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+    
+    const todaysExamsCount = await prisma.exam.count({
       where: {
-        sectionId: enrollment.sectionId,
-        academicYearId: enrollment.academicYearId,
-        status: 'ACTIVE'
-      },
-      select: { id: true }
-    })).map(a => a.id);
-
-    const results = await prisma.result.findMany({
-      where: { studentId, published: true }
+        OR: [
+          { examStudents: { some: { studentId } } },
+          { examStudents: { none: {} }, facultyAssignmentId: { in: assignmentIds } }
+        ],
+        status: { in: ['SCHEDULED', 'ACTIVE'] },
+        startTime: { gte: startOfDay, lte: endOfDay }
+      }
     });
-    const completedExamsCount = results.length;
-    const avgScore = completedExamsCount > 0
-      ? (results.reduce((acc, curr) => acc + curr.percentage, 0) / completedExamsCount).toFixed(1)
-      : 0;
+
+    const upcomingExamsCount = await prisma.exam.count({
+      where: {
+        OR: [
+          { examStudents: { some: { studentId } } },
+          { examStudents: { none: {} }, facultyAssignmentId: { in: assignmentIds } }
+        ],
+        status: 'SCHEDULED'
+      }
+    });
+
+    const completedExamsCount = await prisma.exam.count({
+      where: {
+        OR: [
+          { examStudents: { some: { studentId } } },
+          { examStudents: { none: {} }, facultyAssignmentId: { in: assignmentIds } }
+        ],
+        status: 'COMPLETED'
+      }
+    });
+
+    const pendingResultsCount = await prisma.exam.count({
+      where: {
+        OR: [
+          { examStudents: { some: { studentId } } },
+          { examStudents: { none: {} }, facultyAssignmentId: { in: assignmentIds } }
+        ],
+        status: 'EVALUATION'
+      }
+    });
+
+    const publishedResultsCount = await prisma.exam.count({
+      where: {
+        OR: [
+          { examStudents: { some: { studentId } } },
+          { examStudents: { none: {} }, facultyAssignmentId: { in: assignmentIds } }
+        ],
+        status: 'CLOSED'
+      }
+    });
 
     const activeExams = await prisma.exam.findMany({
       where: {
-        facultyAssignmentId: { in: assignmentIds },
-        status: 'PUBLISHED',
-        startTime: { lte: now },
-        endTime: { gte: now }
+        OR: [
+          { examStudents: { some: { studentId } } },
+          { examStudents: { none: {} }, facultyAssignmentId: { in: assignmentIds } }
+        ],
+        status: 'ACTIVE'
       },
       include: {
         facultyAssignment: {
-          include: { subject: true, section: true, faculty: { select: { name: true } } }
+          include: { subject: true, assessmentType: true, academicYear: true, faculty: { select: { name: true } } }
         },
         config: true
       }
     });
 
-    // Filter out exams the student already submitted
+    // Filter out submitted ones
     const submittedSessionExamIds = (await prisma.examSession.findMany({
       where: { studentId, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] } },
       select: { examId: true }
@@ -112,16 +144,19 @@ exports.getDashboardData = async (req, res) => {
 
     const upcomingExams = await prisma.exam.findMany({
       where: {
-        facultyAssignmentId: { in: assignmentIds },
-        status: 'PUBLISHED',
-        startTime: { gt: now }
+        OR: [
+          { examStudents: { some: { studentId } } },
+          { examStudents: { none: {} }, facultyAssignmentId: { in: assignmentIds } }
+        ],
+        status: 'SCHEDULED'
       },
       include: {
         facultyAssignment: {
-          include: { subject: true, section: true, faculty: { select: { name: true } } }
+          include: { subject: true, assessmentType: true, academicYear: true, faculty: { select: { name: true } } }
         }
       },
-      orderBy: { startTime: 'asc' }
+      orderBy: { startTime: 'asc' },
+      take: 5
     });
 
     const user = await prisma.user.findUnique({
@@ -136,20 +171,22 @@ exports.getDashboardData = async (req, res) => {
     });
 
     res.json({
-      stats: {
+      stats: { 
+        todaysExams: todaysExamsCount, 
+        upcomingExams: upcomingExamsCount, 
         completedExams: completedExamsCount,
-        avgScore,
-        upcomingExams: upcomingExams.length,
-        activeExams: filteredActiveExams.length
+        pendingResults: pendingResultsCount,
+        publishedResults: publishedResultsCount,
+        attendance: 100 // placeholder since attendance model isn't active
       },
       activeExams: filteredActiveExams,
       upcomingExams,
       enrollment,
-      notifications,
-      user
+      user,
+      notifications
     });
   } catch (error) {
-    console.error('Dashboard error:', error);
+    console.error('Student dashboard error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -158,32 +195,27 @@ exports.getDashboardData = async (req, res) => {
 // EXAM LISTING ENDPOINTS
 // ============================================================================
 async function getStudentAssignmentIds(studentId) {
-  const enrollment = await prisma.studentEnrollment.findFirst({
-    where: { studentId, status: 'ACTIVE' }
+  const enrollments = await prisma.assignmentStudent.findMany({
+    where: { studentId, status: 'ACTIVE' },
+    select: { assignmentId: true }
   });
-  if (!enrollment) return [];
-
-  return (await prisma.facultyAssignment.findMany({
-    where: {
-      sectionId: enrollment.sectionId,
-      academicYearId: enrollment.academicYearId,
-      status: 'ACTIVE'
-    },
-    select: { id: true }
-  })).map(a => a.id);
+  return enrollments.map(e => e.assignmentId);
 }
 
 exports.getUpcomingExams = async (req, res) => {
   try {
+    await updateGlobalExamStatuses();
     const assignmentIds = await getStudentAssignmentIds(req.user.id);
     const exams = await prisma.exam.findMany({
       where: {
-        facultyAssignmentId: { in: assignmentIds },
-        status: 'PUBLISHED',
-        startTime: { gt: new Date() }
+        OR: [
+          { examStudents: { some: { studentId: req.user.id } } },
+          { examStudents: { none: {} }, facultyAssignmentId: { in: assignmentIds } }
+        ],
+        status: 'SCHEDULED'
       },
       include: {
-        facultyAssignment: { include: { subject: true, section: true, faculty: { select: { name: true } } } },
+        facultyAssignment: { include: { subject: true, assessmentType: true, academicYear: true, faculty: { select: { name: true } } } },
         config: true
       },
       orderBy: { startTime: 'asc' }
@@ -196,17 +228,33 @@ exports.getUpcomingExams = async (req, res) => {
 
 exports.getLiveExams = async (req, res) => {
   try {
+    await updateGlobalExamStatuses();
     const now = new Date();
     const assignmentIds = await getStudentAssignmentIds(req.user.id);
     const exams = await prisma.exam.findMany({
       where: {
-        facultyAssignmentId: { in: assignmentIds },
-        status: 'PUBLISHED',
-        startTime: { lte: now },
-        endTime: { gte: now }
+        OR: [
+          { examStudents: { some: { studentId: req.user.id } } },
+          { examStudents: { none: {} }, facultyAssignmentId: { in: assignmentIds } }
+        ],
+        status: 'ACTIVE',
+        AND: [
+          {
+            OR: [
+              { startTime: { lte: now } },
+              { startTime: null }
+            ]
+          },
+          {
+            OR: [
+              { endTime: { gte: now } },
+              { endTime: null }
+            ]
+          }
+        ]
       },
       include: {
-        facultyAssignment: { include: { subject: true, section: true, faculty: { select: { name: true } } } },
+        facultyAssignment: { include: { subject: true, assessmentType: true, academicYear: true, faculty: { select: { name: true } } } },
         config: true
       }
     });
@@ -218,18 +266,18 @@ exports.getLiveExams = async (req, res) => {
 
 exports.getExamHistory = async (req, res) => {
   try {
+    await updateGlobalExamStatuses();
     const assignmentIds = await getStudentAssignmentIds(req.user.id);
     const exams = await prisma.exam.findMany({
       where: {
-        facultyAssignmentId: { in: assignmentIds },
         OR: [
-          { status: 'COMPLETED' },
-          { status: 'RESULTS_PUBLISHED' },
-          { endTime: { lt: new Date() } }
-        ]
+          { examStudents: { some: { studentId: req.user.id } } },
+          { examStudents: { none: {} }, facultyAssignmentId: { in: assignmentIds } }
+        ],
+        status: { in: ['COMPLETED', 'EVALUATION', 'CLOSED', 'ARCHIVED'] }
       },
       include: {
-        facultyAssignment: { include: { subject: true, section: true } },
+        facultyAssignment: { include: { subject: true } },
         results: { where: { studentId: req.user.id } }
       },
       orderBy: { endTime: 'desc' }
@@ -247,7 +295,7 @@ exports.getResults = async (req, res) => {
   try {
     const studentId = req.user.id;
 
-    // Get all results for this student (published ones show full data, others show "pending")
+        // Get all results for this student (published ones show full data, others show "pending")
     const results = await prisma.result.findMany({
       where: { studentId },
       include: {
@@ -256,7 +304,6 @@ exports.getResults = async (req, res) => {
             facultyAssignment: {
               include: {
                 subject: true,
-                section: { include: { semester: true } },
                 faculty: { select: { name: true } }
               }
             }
@@ -275,20 +322,18 @@ exports.getResults = async (req, res) => {
         subject: r.exam.facultyAssignment.subject.name,
         subjectCode: r.exam.facultyAssignment.subject.code,
         faculty: r.exam.facultyAssignment.faculty.name,
-        section: r.exam.facultyAssignment.section.name,
-        semester: r.exam.facultyAssignment.section.semester.semesterNumber,
+        section: '-',
+        semester: '-',
         status: r.status,
-        published: r.published,
         createdAt: r.createdAt,
       };
 
-      if (r.published) {
+      if (r.status === 'PUBLISHED') {
         return {
           ...base,
           totalMarks: r.totalMarks,
           marksObtained: r.marksObtained,
           objectiveMarks: r.objectiveMarks,
-          descriptiveMarks: r.descriptiveMarks,
           percentage: r.percentage,
           grade: r.grade,
           isPass: r.isPass,
@@ -302,11 +347,9 @@ exports.getResults = async (req, res) => {
         };
       }
 
-      // Unpublished: show provisional objective score
+      // Unpublished: show only status without marks
       return {
         ...base,
-        totalMarks: r.totalMarks,
-        objectiveMarks: r.objectiveMarks,
         isProvisional: true,
       };
     });
@@ -323,12 +366,13 @@ exports.getResults = async (req, res) => {
 // ============================================================================
 exports.getExamDetails = async (req, res) => {
   try {
+    await updateGlobalExamStatuses();
     const { id } = req.params;
     const exam = await prisma.exam.findUnique({
       where: { id },
       include: {
         facultyAssignment: {
-          include: { subject: true, section: { include: { semester: { include: { course: true } } } }, faculty: { select: { name: true } } }
+          include: { subject: true, faculty: { select: { name: true } } }
         },
         config: true
       }
@@ -337,8 +381,28 @@ exports.getExamDetails = async (req, res) => {
     if (!exam) return res.status(404).json({ error: 'Exam not found' });
 
     const assignmentIds = await getStudentAssignmentIds(req.user.id);
-    if (!assignmentIds.includes(exam.facultyAssignmentId)) {
-      return res.status(403).json({ error: 'You are not eligible for this exam' });
+    
+    // Check strict ExamStudent mapping
+    const examStudentCount = await prisma.examStudent.count({
+      where: { examId: id }
+    });
+    
+    if (examStudentCount > 0) {
+      const isAssigned = await prisma.examStudent.findUnique({
+        where: { examId_studentId: { examId: id, studentId: req.user.id } }
+      });
+      if (!isAssigned) {
+        return res.status(403).json({ error: 'You are not eligible for this exam' });
+      }
+    } else {
+      // Fallback
+      if (!assignmentIds.includes(exam.facultyAssignmentId)) {
+        return res.status(403).json({ error: 'You are not eligible for this exam' });
+      }
+    }
+
+    if (!['ACTIVE', 'SCHEDULED'].includes(exam.status)) {
+      return res.status(403).json({ error: 'This exam is not available yet' });
     }
 
     res.json(exam);
@@ -366,20 +430,57 @@ exports.startExamSession = async (req, res) => {
   try {
     const examId = req.params.id;
     const studentId = req.user.id;
+    
+    console.log(`\n--- START EXAM REQUEST ---`);
+    console.log(`Student ID: ${studentId}`);
+    console.log(`Exam ID: ${examId}`);
+    console.log(`Current Time: ${new Date().toISOString()}`);
 
     const assignmentIds = await getStudentAssignmentIds(studentId);
+
     const exam = await prisma.exam.findUnique({
       where: { id: examId },
-      include: { config: true }
+      include: { config: true, facultyAssignment: true, _count: { select: { examStudents: true } } }
     });
-    if (!exam) return res.status(404).json({ error: 'Exam not found' });
-    if (!assignmentIds.includes(exam.facultyAssignmentId)) {
-      return res.status(403).json({ error: 'You are not eligible for this exam' });
+    
+    if (!exam) {
+      console.log(`Result: Exam not found`);
+      return res.status(404).json({ error: 'Exam not found' });
+    }
+    
+    console.log(`Exam Status: ${exam.status}, Faculty Assignment ID: ${exam.facultyAssignmentId}`);
+
+    if (exam._count.examStudents > 0) {
+      // Security Check: Verify if student is explicitly assigned to this exam
+      const assignmentCheck = await prisma.examStudent.findUnique({
+        where: { examId_studentId: { examId, studentId } }
+      });
+
+      if (!assignmentCheck) {
+        console.log(`Result: Not eligible (No ExamStudent mapping)`);
+        return res.status(403).json({ error: 'You are not assigned to this examination.' });
+      }
+    } else {
+      // Legacy fallback
+      if (!assignmentIds.includes(exam.facultyAssignmentId)) {
+        console.log(`Result: Not eligible (Legacy fallback)`);
+        return res.status(403).json({ error: 'You are not eligible for this exam (legacy mode)' });
+      }
     }
 
     const now = new Date();
-    if (exam.status !== 'PUBLISHED' || !exam.startTime || !exam.endTime || now < exam.startTime || now > exam.endTime) {
-      return res.status(400).json({ error: 'This exam is not currently active' });
+    
+    if (!['ACTIVE', 'SCHEDULED'].includes(exam.status)) {
+      console.log(`Result: Exam not active or scheduled`);
+      return res.status(400).json({ error: 'This exam is not available' });
+    }
+    if (exam.startTime && now < exam.startTime) {
+      console.log(`Result: Exam not started yet`);
+      return res.status(400).json({ error: 'This exam has not started yet' });
+    }
+    if (exam.endTime && now > exam.endTime) {
+      console.log(`Result: Exam already ended`);
+      return res.status(400).json({ error: 'This exam has already ended' });
     }
 
     let session = await prisma.examSession.findFirst({
@@ -391,6 +492,7 @@ exports.startExamSession = async (req, res) => {
         where: { examId, studentId, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] } }
       });
       if (submitted) {
+        console.log(`Result: Already submitted`);
         return res.status(400).json({ error: 'You have already submitted this exam' });
       }
 
@@ -399,6 +501,7 @@ exports.startExamSession = async (req, res) => {
         where: { examId, studentId }
       });
 
+      console.log(`Creating new ExamSession...`);
       session = await prisma.examSession.create({
         data: {
           examId, studentId, status: 'IN_PROGRESS',
@@ -409,6 +512,7 @@ exports.startExamSession = async (req, res) => {
           browser: req.headers['user-agent']
         }
       });
+      console.log(`ExamSession Created: ${session.id}`);
 
       await prisma.activityLog.create({
         data: {
@@ -418,12 +522,16 @@ exports.startExamSession = async (req, res) => {
           ipAddress: req.ip, browser: req.headers['user-agent']
         }
       });
+    } else {
+      console.log(`Resuming existing ExamSession: ${session.id}`);
     }
 
     res.json(session);
   } catch (error) {
-    console.error('Start exam error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('\n--- START EXAM EXCEPTION ---');
+    console.error(error);
+    console.error(error.stack);
+    res.status(500).json({ error: 'Internal database error' });
   }
 };
 
@@ -472,7 +580,8 @@ exports.getExamQuestions = async (req, res) => {
 };
 
 // ============================================================================
-// SUBMIT EXAM — Full auto-evaluation
+// SUBMIT EXAM — Full auto-evaluation with enhanced answer storage
+// Results are NEVER published immediately — faculty must publish explicitly.
 // ============================================================================
 exports.submitExam = async (req, res) => {
   try {
@@ -496,7 +605,7 @@ exports.submitExam = async (req, res) => {
     const timeTaken = Math.round((now - new Date(session.startedAt)) / 1000);
     const isLateSubmission = session.exam.endTime ? now > new Date(session.exam.endTime) : false;
 
-    // Clear previous answers
+    // Clear previous answers (from auto-save)
     await prisma.studentAnswer.deleteMany({ where: { sessionId } });
 
     // Get all exam questions with correct answers
@@ -507,51 +616,66 @@ exports.submitExam = async (req, res) => {
       }
     });
 
-    const questionMap = {};
-    examQuestions.forEach(eq => { questionMap[eq.question.id] = eq.question; });
-
     let objectiveMarks = 0;
-    let totalObjectiveMax = 0;
-    let totalDescriptiveMax = 0;
+    let descriptiveMarks = 0;
     let correctCount = 0;
     let incorrectCount = 0;
     let attemptedCount = 0;
+    let pendingDescriptive = 0;
     const totalQuestions = examQuestions.length;
-    const pendingDescriptive = [];
 
-    // Process each question
+    // Process each question — store EVERYTHING submitted
     for (const eq of examQuestions) {
       const question = eq.question;
-      const answer = answers ? answers[question.id] : undefined;
+      // answers can be: { questionId: optionId } (legacy)
+      // or: { questionId: { selectedOptionId, textAnswer, timeSpent, markedForReview, visited } } (enhanced)
+      const rawAnswer = answers ? answers[question.id] : undefined;
 
-      if (isObjectiveType(question.type)) {
-        totalObjectiveMax += question.marks;
-      } else {
-        totalDescriptiveMax += question.marks;
+      // Parse enhanced or legacy format
+      let selectedOptionId = null;
+      let textAnswer = null;
+      let questionTimeSpent = 0;
+      let questionMarkedForReview = false;
+      let questionVisited = false;
+
+      if (rawAnswer && typeof rawAnswer === 'object' && !Array.isArray(rawAnswer)) {
+        // Enhanced format
+        selectedOptionId = rawAnswer.selectedOptionId || rawAnswer.answer || null;
+        textAnswer = rawAnswer.textAnswer || null;
+        questionTimeSpent = rawAnswer.timeSpent || 0;
+        questionMarkedForReview = rawAnswer.markedForReview || false;
+        questionVisited = rawAnswer.visited !== undefined ? rawAnswer.visited : true;
+      } else if (rawAnswer && typeof rawAnswer === 'string') {
+        // Legacy format: answer is an option ID
+        selectedOptionId = rawAnswer;
+        questionVisited = true;
       }
 
-      // No answer provided
-      if (!answer && answer !== '') {
+      const isDescriptive = ['SHORT_ANSWER', 'LONG_ANSWER', 'ESSAY'].includes(question.type);
+      const isObjective = isObjectiveType(question.type);
+
+      // No answer provided at all
+      if (!selectedOptionId && !textAnswer) {
         await prisma.studentAnswer.create({
           data: {
             sessionId, studentId, questionId: question.id,
             marksObtained: 0,
-            isCorrect: null,
-            evaluationStatus: isObjectiveType(question.type) ? 'AUTO_EVALUATED' : 'PENDING',
-            isEvaluated: isObjectiveType(question.type),
+            timeSpent: questionTimeSpent,
+            markedForReview: questionMarkedForReview,
+            visited: questionVisited,
+            evaluationStatus: isObjective ? 'EVALUATED' : 'PENDING',
+            isEvaluated: isObjective,
           }
         });
-        if (!isObjectiveType(question.type)) {
-          pendingDescriptive.push(question.id);
-        }
+        if (isDescriptive) pendingDescriptive++;
         continue;
       }
 
       attemptedCount++;
 
-      if (question.type === 'MCQ' || question.type === 'TRUE_FALSE') {
-        // answer is an option ID
-        const selectedOption = question.options.find(o => o.id === answer);
+      if (isObjective && selectedOptionId) {
+        // Auto-evaluate objective questions
+        const selectedOption = question.options.find(o => o.id === selectedOptionId);
         const isCorrect = selectedOption ? selectedOption.isCorrect : false;
         const marks = isCorrect ? question.marks : (question.negativeMarks > 0 ? -question.negativeMarks : 0);
         objectiveMarks += marks;
@@ -563,63 +687,51 @@ exports.submitExam = async (req, res) => {
             sessionId, studentId, questionId: question.id,
             marksObtained: marks,
             isCorrect,
+            textAnswer,
+            timeSpent: questionTimeSpent,
+            markedForReview: questionMarkedForReview,
+            visited: questionVisited,
+            evaluationStatus: 'EVALUATED',
             isEvaluated: true,
-            evaluationStatus: 'AUTO_EVALUATED',
-            selectedOptions: selectedOption ? { connect: { id: selectedOption.id } } : undefined
+            selectedOptions: selectedOption ? { connect: { id: selectedOption.id } } : undefined,
           }
         });
-      } else if (question.type === 'MULTIPLE_CORRECT') {
-        // answer is an array of option IDs
-        const selectedIds = Array.isArray(answer) ? answer : [answer];
-        const correctIds = question.options.filter(o => o.isCorrect).map(o => o.id);
-        const isCorrect = selectedIds.length === correctIds.length && selectedIds.every(id => correctIds.includes(id));
-        const marks = isCorrect ? question.marks : (question.negativeMarks > 0 ? -question.negativeMarks : 0);
-        objectiveMarks += marks;
-        if (isCorrect) correctCount++;
-        else incorrectCount++;
-
+      } else if (isDescriptive) {
+        // Descriptive: store answer, mark as PENDING for faculty evaluation
+        pendingDescriptive++;
         await prisma.studentAnswer.create({
           data: {
             sessionId, studentId, questionId: question.id,
-            marksObtained: marks,
-            isCorrect,
-            isEvaluated: true,
-            evaluationStatus: 'AUTO_EVALUATED',
-            selectedOptions: { connect: selectedIds.map(id => ({ id })) }
-          }
-        });
-      } else if (question.type === 'FILL_IN_BLANK') {
-        // answer is text, compare with correct option text
-        const correctOption = question.options.find(o => o.isCorrect);
-        const isCorrect = correctOption && typeof answer === 'string' && 
-          answer.trim().toLowerCase() === correctOption.text.trim().toLowerCase();
-        const marks = isCorrect ? question.marks : (question.negativeMarks > 0 ? -question.negativeMarks : 0);
-        objectiveMarks += marks;
-        if (isCorrect) correctCount++;
-        else incorrectCount++;
-
-        await prisma.studentAnswer.create({
-          data: {
-            sessionId, studentId, questionId: question.id,
-            textResponse: typeof answer === 'string' ? answer : String(answer),
-            marksObtained: marks,
-            isCorrect,
-            isEvaluated: true,
-            evaluationStatus: 'AUTO_EVALUATED',
+            textAnswer: textAnswer || selectedOptionId, // store whatever text was typed
+            marksObtained: null, // faculty will assign marks
+            timeSpent: questionTimeSpent,
+            markedForReview: questionMarkedForReview,
+            visited: questionVisited,
+            evaluationStatus: 'PENDING',
+            isEvaluated: false,
           }
         });
       } else {
-        // Descriptive: SHORT_ANSWER, LONG_ANSWER, CODING, FILE_UPLOAD
-        pendingDescriptive.push(question.id);
+        // Fallback: treat as objective
+        const selectedOption = question.options.find(o => o.id === selectedOptionId);
+        const isCorrect = selectedOption ? selectedOption.isCorrect : false;
+        const marks = isCorrect ? question.marks : (question.negativeMarks > 0 ? -question.negativeMarks : 0);
+        objectiveMarks += marks;
+        if (isCorrect) correctCount++;
+        else incorrectCount++;
+
         await prisma.studentAnswer.create({
           data: {
             sessionId, studentId, questionId: question.id,
-            textResponse: typeof answer === 'string' ? answer : (answer?.text || null),
-            fileUrl: answer?.fileUrl || null,
-            marksObtained: null,
-            isCorrect: null,
-            isEvaluated: false,
-            evaluationStatus: 'PENDING',
+            marksObtained: marks,
+            isCorrect,
+            textAnswer,
+            timeSpent: questionTimeSpent,
+            markedForReview: questionMarkedForReview,
+            visited: questionVisited,
+            evaluationStatus: 'EVALUATED',
+            isEvaluated: true,
+            selectedOptions: selectedOption ? { connect: { id: selectedOption.id } } : undefined,
           }
         });
       }
@@ -629,19 +741,10 @@ exports.submitExam = async (req, res) => {
     objectiveMarks = Math.max(0, objectiveMarks);
 
     const unansweredQuestions = totalQuestions - attemptedCount;
-    const obtainedMarks = objectiveMarks; // descriptive not yet graded
+    const obtainedMarks = objectiveMarks + descriptiveMarks;
     const percentage = session.exam.totalMarks > 0 ? (obtainedMarks / session.exam.totalMarks) * 100 : 0;
-    const hasPendingDescriptive = pendingDescriptive.length > 0;
 
-    // Determine result status
-    let resultStatus;
-    if (hasPendingDescriptive) {
-      resultStatus = 'PENDING_EVALUATION';
-    } else {
-      resultStatus = 'AUTO_EVALUATED';
-    }
-
-    // Calculate grade (provisional if has pending descriptive)
+    // Calculate grade (provisional — may change after descriptive evaluation)
     const gradeInfo = await calculateGrade(percentage);
 
     // Update session
@@ -660,14 +763,14 @@ exports.submitExam = async (req, res) => {
         totalMarks: session.exam.totalMarks,
         obtainedMarks,
         objectiveMarks,
-        descriptiveMarks: 0,
         percentage,
         browser: req.headers['user-agent'],
         ipAddress: req.ip,
       }
     });
 
-    // Create result
+    // Create result — UNPUBLISHED by default
+    // Faculty must explicitly publish results for students to see marks
     const result = await prisma.result.create({
       data: {
         examId: session.examId,
@@ -676,12 +779,12 @@ exports.submitExam = async (req, res) => {
         marksObtained: obtainedMarks,
         totalMarks: session.exam.totalMarks,
         objectiveMarks,
-        descriptiveMarks: 0,
         percentage,
-        isPass: hasPendingDescriptive ? false : gradeInfo.isPass,
-        grade: hasPendingDescriptive ? null : gradeInfo.grade,
-        status: resultStatus,
-        published: false,
+        isPass: gradeInfo.isPass,
+        grade: gradeInfo.grade,
+        status: pendingDescriptive > 0 ? 'PENDING_EVALUATION' : 'EVALUATED',
+        published: false,       // ← CRITICAL: Never publish immediately
+        publishedAt: null,      // ← Will be set when faculty publishes
         totalQuestions,
         attemptedQuestions: attemptedCount,
         correctAnswers: correctCount,
@@ -695,19 +798,30 @@ exports.submitExam = async (req, res) => {
       data: {
         userId: studentId, role: 'STUDENT', examId: session.examId, sessionId,
         action: forced ? 'AUTO_SUBMITTED' : 'EXAM_SUBMITTED',
-        details: `Score: ${obtainedMarks}/${session.exam.totalMarks} (${percentage.toFixed(1)}%). ${hasPendingDescriptive ? pendingDescriptive.length + ' questions pending evaluation.' : 'Fully auto-evaluated.'}`,
+        details: `Submitted. Objective: ${objectiveMarks}/${session.exam.totalMarks}. Pending descriptive: ${pendingDescriptive}.`,
         ipAddress: req.ip, browser: req.headers['user-agent']
       }
     });
 
-    // Notification to student
+    // Notification to student — no marks revealed
     await prisma.notification.create({
       data: {
         userId: studentId,
         examId: session.examId,
         type: 'SUBMISSION_RECEIVED',
         title: 'Exam Submitted Successfully',
-        message: `Your submission for "${session.exam.title}" has been received. ${hasPendingDescriptive ? 'Descriptive answers are pending faculty evaluation.' : 'All answers have been auto-evaluated.'}`
+        message: `Your submission for "${session.exam.title}" has been received. Results will be available after faculty evaluation and publication.`
+      }
+    });
+
+    // Notification to faculty
+    await prisma.notification.create({
+      data: {
+        userId: session.exam.facultyAssignment.facultyId,
+        examId: session.examId,
+        type: pendingDescriptive > 0 ? 'EVALUATION_PENDING' : 'SUBMISSION_RECEIVED',
+        title: 'Student Submission',
+        message: `${session.student.name} (${session.student.registerNumber}) has submitted "${session.exam.title}". ${pendingDescriptive > 0 ? pendingDescriptive + ' descriptive answers need evaluation.' : 'Auto-evaluation complete.'}`
       }
     });
 
@@ -717,21 +831,15 @@ exports.submitExam = async (req, res) => {
       io.to(`user_${studentId}`).emit('notification', {
         type: 'SUBMISSION_RECEIVED',
         title: 'Exam Submitted',
-        message: `Your submission for "${session.exam.title}" has been received.`
+        message: `Your submission for "${session.exam.title}" has been received. Results are under evaluation.`
       });
     }
 
+    // Response — do NOT include marks/percentage/grade
     res.json({
       success: true,
-      result,
-      totalMarks: obtainedMarks,
-      objectiveMarks,
-      hasPendingDescriptive,
-      pendingCount: pendingDescriptive.length,
-      totalQuestions,
-      attemptedQuestions: attemptedCount,
-      correctAnswers: correctCount,
-      incorrectAnswers: incorrectCount,
+      message: 'Exam submitted successfully. Results will be available after faculty publishes them.',
+      examTitle: session.exam.title,
     });
   } catch (error) {
     console.error('Submit exam error:', error);
@@ -762,12 +870,40 @@ exports.autoSaveExam = async (req, res) => {
 
     await prisma.studentAnswer.deleteMany({ where: { sessionId } });
 
-    for (const [qId, optId] of Object.entries(answers)) {
-      if (optId) {
-        await prisma.studentAnswer.create({
-          data: { sessionId, studentId, questionId: qId, selectedOptions: typeof optId === 'string' ? { connect: { id: optId } } : undefined, textResponse: typeof optId !== 'string' ? JSON.stringify(optId) : undefined }
-        });
+    for (const [qId, rawAnswer] of Object.entries(answers)) {
+      if (!rawAnswer) continue;
+
+      let selectedOptionId = null;
+      let textAnswer = null;
+      let questionTimeSpent = 0;
+      let questionMarkedForReview = false;
+      let questionVisited = false;
+
+      if (typeof rawAnswer === 'object' && !Array.isArray(rawAnswer)) {
+        selectedOptionId = rawAnswer.selectedOptionId || rawAnswer.answer || null;
+        textAnswer = rawAnswer.textAnswer || null;
+        questionTimeSpent = rawAnswer.timeSpent || 0;
+        questionMarkedForReview = rawAnswer.markedForReview || false;
+        questionVisited = rawAnswer.visited !== undefined ? rawAnswer.visited : true;
+      } else if (typeof rawAnswer === 'string') {
+        selectedOptionId = rawAnswer;
+        questionVisited = true;
       }
+
+      await prisma.studentAnswer.create({
+        data: {
+          sessionId,
+          studentId,
+          questionId: qId,
+          textAnswer,
+          timeSpent: questionTimeSpent,
+          markedForReview: questionMarkedForReview,
+          visited: questionVisited,
+          evaluationStatus: 'PENDING',
+          isEvaluated: false,
+          selectedOptions: selectedOptionId ? { connect: { id: selectedOptionId } } : undefined
+        }
+      });
     }
 
     // Update lastSavedAt
@@ -876,13 +1012,17 @@ exports.getProfile = async (req, res) => {
       select: {
         id: true, name: true, email: true, register_no: true, phone: true, departmentId: true,
         department: true,
-        enrollments: {
+        assignments: {
           where: { status: 'ACTIVE' },
           include: {
-            course: true,
-            semester: { include: { academicYear: true } },
-            section: true,
-            academicYear: true
+            assignment: {
+              include: {
+                subject: true,
+                assessmentType: true,
+                academicYear: true,
+                faculty: { select: { name: true } }
+              }
+            }
           }
         }
       }

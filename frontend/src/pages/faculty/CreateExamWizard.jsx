@@ -20,8 +20,9 @@ import PageHeader from '../../components/PageHeader';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import facultyApi from '../../api/facultyApi';
 import { useNavigate } from 'react-router-dom';
+import StudentAssignmentStep from './components/StudentAssignmentStep';
 
-const steps = ['Exam Details', 'Schedule', 'Questions', 'Configuration', 'Review'];
+const steps = ['Exam Details', 'Schedule', 'Questions', 'Configuration', 'Student Assignment', 'Review'];
 
 const examSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters').max(100, 'Title too long'),
@@ -45,6 +46,7 @@ const examSchema = z.object({
 
 const CreateExamWizard = () => {
   const [activeStep, setActiveStep] = useState(0);
+  const [selectedStudents, setSelectedStudents] = useState([]);
   const [successDialogOpen, setSuccessDialogOpen] = useState(false);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -88,8 +90,8 @@ const CreateExamWizard = () => {
 
   const assignmentOptions = assignments.map(a => ({
     value: a.id,
-    label: a.subject.name,
-    subtitle: `Semester ${a.section.semester.semesterNumber} \u2022 ${a.section.name}`
+    label: a.subject?.name || 'Unknown Subject',
+    subtitle: `${a.assessmentType?.name || 'N/A'} • ${a.academicYear?.name || 'N/A'}`
   }));
 
   const createExamMutation = useMutation({
@@ -99,7 +101,8 @@ const CreateExamWizard = () => {
       setSuccessDialogOpen(true);
     },
     onError: (err) => {
-      alert("Failed to create exam: " + (err.response?.data?.error || err.message));
+      // Axios interceptor returns the data object directly, so err is already the parsed JSON body
+      alert("Failed to create exam: " + (err.error || err.message || 'Unknown error'));
     }
   });
 
@@ -139,15 +142,15 @@ const CreateExamWizard = () => {
       startTime: data.startTime || undefined,
       endTime: data.endTime || undefined,
       questionIds: data.selectedQuestions?.map(q => q.id) || [],
+      assignedStudentIds: selectedStudents.map(s => s.id),
       config: {
         randomQuestions: data.randomQuestions ?? true,
         randomOptions: data.randomOptions ?? true,
         requireFullscreen: data.requireFullscreen ?? true,
-        requireCamera: data.requireCamera ?? false,
         maxWarnings: data.maxWarnings ?? 3,
-        showResult: data.showResult || 'manual',
       }
     };
+    console.log("Create Exam Payload (Draft):", payload);
     createExamMutation.mutate(payload);
   };
 
@@ -162,15 +165,15 @@ const CreateExamWizard = () => {
       startTime: data.startTime || undefined,
       endTime: data.endTime || undefined,
       questionIds: data.selectedQuestions.map(q => q.id),
+      assignedStudentIds: selectedStudents.map(s => s.id),
       config: {
         randomQuestions: data.randomQuestions,
         randomOptions: data.randomOptions,
         requireFullscreen: data.requireFullscreen,
-        requireCamera: data.requireCamera,
         maxWarnings: data.maxWarnings,
-        showResult: data.showResult,
       }
     };
+    console.log("Create Exam Payload:", payload);
     createExamMutation.mutate(payload);
   };
 
@@ -322,7 +325,7 @@ const CreateExamWizard = () => {
                   rows={questions}
                   columns={[
                     { field: 'text', headerName: 'Question', flex: 2, minWidth: 200 },
-                    { field: 'bank', headerName: 'Bank', width: 140, valueGetter: (params) => params.row.bank?.name },
+                    { field: 'bank', headerName: 'Bank', width: 140, renderCell: ({ row }) => row.bank?.name },
                     { field: 'difficulty', headerName: 'Difficulty', width: 100 },
                     { field: 'marks', headerName: 'Marks', width: 80, align: 'center', headerAlign: 'center' },
                   ]}
@@ -420,6 +423,15 @@ const CreateExamWizard = () => {
 
       case 4:
         return (
+          <StudentAssignmentStep
+            assignmentId={formValues.facultyAssignmentId}
+            selectedStudents={selectedStudents}
+            setSelectedStudents={setSelectedStudents}
+          />
+        );
+
+      case 5:
+        return (
           <Box>
             <Alert severity="success" sx={{ mb: 2 }}>Review your exam configuration before saving.</Alert>
             <Grid container spacing={2}>
@@ -455,11 +467,12 @@ const CreateExamWizard = () => {
                 <Card variant="outlined" sx={{ boxShadow: 'none', borderRadius: 1.5 }}>
                   <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
                     <Typography variant="body2" fontWeight={600} color="primary">
-                      <LibraryBooksOutlined sx={{ mr: 1, verticalAlign: 'middle', fontSize: 16 }} />Questions
+                      <LibraryBooksOutlined sx={{ mr: 1, verticalAlign: 'middle', fontSize: 16 }} />Questions & Students
                     </Typography>
                     <Stack spacing={1} sx={{ mt: 1.5 }}>
                       <ReviewItem label="Total Questions" value={selectedQuestions.length} />
                       <ReviewItem label="Total Marks" value={totalSelectedMarks} />
+                      <ReviewItem label="Assigned Students" value={selectedStudents.length > 0 ? selectedStudents.length : 'All (Legacy fallback if none)'} />
                     </Stack>
                   </CardContent>
                 </Card>

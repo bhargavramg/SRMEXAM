@@ -1,77 +1,79 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Box, Grid, Typography, Button, Chip, IconButton, Tooltip,
   TextField, Select, MenuItem, FormControl, InputLabel, InputAdornment,
   Stack, Menu, ListItemIcon, ListItemText, Divider, Card, CardContent,
 } from '@mui/material';
 import {
-  Add, Search, FilterList, SortOutlined, CloudUpload, CloudDownload,
+  Add, Search, CloudUpload, CloudDownload,
   Visibility, Edit, ContentCopy, Archive, Delete, MoreVert,
-  QuizOutlined, CheckCircle, Block,
+  Description
 } from '@mui/icons-material';
 import { DataTable } from '../../components/tables';
 import { DeleteDialog, ConfirmDialog } from '../../components/dialogs';
 import { LoadingSkeleton, EmptyState, ErrorState } from '../../components/feedback';
 import PageHeader from '../../components/PageHeader';
+import { useQueryClient } from '@tanstack/react-query';
+import facultyApi from '../../api/facultyApi';
+import QuestionImportDialog from './QuestionImportDialog';
+import * as XLSX from 'xlsx';
 
-const MOCK_QUESTIONS = Array.from({ length: 50 }, (_, i) => ({
-  id: `Q${String(i + 1).padStart(4, '0')}`,
-  question: i % 3 === 0
-    ? `Which of the following best describes the concept of object-oriented programming?`
-    : i % 3 === 1
-    ? `What is the time complexity of binary search in a sorted array?`
-    : `Explain the difference between TCP and UDP protocols.`,
-  subject: ['Data Structures', 'Algorithms', 'Database Systems', 'Operating Systems', 'Computer Networks'][i % 5],
-  category: ['Conceptual', 'Analytical', 'Applied', 'Theoretical'][i % 4],
-  difficulty: ['Easy', 'Medium', 'Hard', 'Expert'][i % 4],
-  marks: [1, 2, 5, 10][i % 4],
-  type: ['MCQ', 'True/False', 'Short Answer', 'Coding', 'Essay'][i % 5],
-  createdBy: `Dr. ${['Sharma', 'Patel', 'Verma', 'Gupta', 'Singh'][i % 5]}`,
-  lastUpdated: new Date(Date.now() - i * 86400000).toLocaleDateString(),
-  status: i % 7 === 0 ? 'Archived' : 'Active',
-}));
-
-const difficultyColors = { Easy: 'success', Medium: 'warning', Hard: 'error', Expert: 'secondary' };
+const difficultyColors = { EASY: 'success', MEDIUM: 'warning', HARD: 'error' };
 
 const QuestionBank = () => {
-  const [loading, setLoading] = useState(false);
+  const [questions, setQuestions] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSubject, setFilterSubject] = useState('all');
   const [filterDifficulty, setFilterDifficulty] = useState('all');
-  const [filterType, setFilterType] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
   const [rowSelectionModel, setRowSelectionModel] = useState([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [selectedQuestion, setSelectedQuestion] = useState(null);
   const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
   const [actionQuestion, setActionQuestion] = useState(null);
+  
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
-  const handleRetry = useCallback(() => {
-    setError(null);
+  const fetchQuestions = useCallback(async () => {
     setLoading(true);
-    setTimeout(() => setLoading(false), 1000);
-  }, []);
+    setError(null);
+    try {
+      const data = await facultyApi.getQuestions();
+      setQuestions(data);
+      if (queryClient) {
+        queryClient.invalidateQueries({ queryKey: ['myQuestions'] });
+      }
+    } catch (err) {
+      console.error("fetchQuestions error:", err);
+      setError(err.message || 'Failed to load questions');
+    } finally {
+      setLoading(false);
+    }
+  }, [queryClient]);
+
+  useEffect(() => {
+    fetchQuestions();
+  }, [fetchQuestions]);
 
   const filteredQuestions = useMemo(() => {
-    return MOCK_QUESTIONS.filter((q) => {
-      if (searchQuery && !q.question.toLowerCase().includes(searchQuery.toLowerCase()) &&
-          !q.id.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-      if (filterSubject !== 'all' && q.subject !== filterSubject) return false;
+    return questions.filter((q) => {
+      if (searchQuery && !q.text.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+      if (filterSubject !== 'all' && q.bank?.subject?.name !== filterSubject) return false;
       if (filterDifficulty !== 'all' && q.difficulty !== filterDifficulty) return false;
-      if (filterType !== 'all' && q.type !== filterType) return false;
-      if (filterStatus !== 'all' && q.status !== filterStatus) return false;
       return true;
     });
-  }, [searchQuery, filterSubject, filterDifficulty, filterType, filterStatus]);
+  }, [questions, searchQuery, filterSubject, filterDifficulty]);
 
   const columns = useMemo(() => [
     {
       field: 'id', headerName: 'ID', width: 90,
+      renderCell: (params) => <Typography variant="caption">{params.value.substring(0, 8)}</Typography>
     },
     {
-      field: 'question',
+      field: 'text',
       headerName: 'Question',
       flex: 2,
       minWidth: 250,
@@ -86,13 +88,14 @@ const QuestionBank = () => {
       headerName: 'Subject',
       width: 140,
       renderCell: (params) => (
-        <Chip label={params.value} size="small" variant="outlined" color="primary" sx={{ fontWeight: 500 }} />
+        <Chip label={params.row.bank?.subject?.name || 'N/A'} size="small" variant="outlined" color="primary" sx={{ fontWeight: 500 }} />
       ),
     },
     {
       field: 'category',
       headerName: 'Category',
       width: 120,
+      renderCell: (params) => params.row.category?.name || 'General'
     },
     {
       field: 'difficulty',
@@ -110,33 +113,10 @@ const QuestionBank = () => {
       headerAlign: 'center',
     },
     {
-      field: 'type',
-      headerName: 'Type',
-      width: 110,
-    },
-    {
-      field: 'createdBy',
-      headerName: 'Created By',
-      width: 130,
-    },
-    {
-      field: 'lastUpdated',
-      headerName: 'Last Updated',
+      field: 'createdAt',
+      headerName: 'Created Date',
       width: 120,
-    },
-    {
-      field: 'status',
-      headerName: 'Status',
-      width: 100,
-      renderCell: (params) => (
-        <Chip
-          label={params.value}
-          size="small"
-          color={params.value === 'Active' ? 'success' : 'secondary'}
-          variant="filled"
-          sx={{ fontWeight: 500, minWidth: 70 }}
-        />
-      ),
+      renderCell: (params) => new Date(params.value).toLocaleDateString()
     },
     {
       field: 'actions',
@@ -163,21 +143,76 @@ const QuestionBank = () => {
     },
   ], []);
 
-  const subjects = useMemo(() => [...new Set(MOCK_QUESTIONS.map(q => q.subject))], []);
-  const difficulties = useMemo(() => ['Easy', 'Medium', 'Hard', 'Expert'], []);
-  const types = useMemo(() => [...new Set(MOCK_QUESTIONS.map(q => q.type))], []);
+  const subjects = useMemo(() => [...new Set(questions.map(q => q.bank?.subject?.name).filter(Boolean))], [questions]);
+  const difficulties = useMemo(() => ['EASY', 'MEDIUM', 'HARD'], []);
 
   const handleDelete = useCallback(async () => {
-    console.log('Delete:', selectedQuestion || rowSelectionModel);
-    setDeleteDialogOpen(false);
-    setSelectedQuestion(null);
-  }, [selectedQuestion, rowSelectionModel]);
+    try {
+      if (selectedQuestion) {
+        await facultyApi.deleteQuestion(selectedQuestion.id);
+      } else {
+        // Bulk delete logic could go here if implemented in API
+      }
+      fetchQuestions();
+    } catch (error) {
+      console.error("Delete failed", error);
+    } finally {
+      setDeleteDialogOpen(false);
+      setSelectedQuestion(null);
+    }
+  }, [selectedQuestion, fetchQuestions]);
 
   const handleArchive = useCallback(async () => {
-    console.log('Archive:', selectedQuestion || rowSelectionModel);
+    // Implement archive logic
     setArchiveDialogOpen(false);
     setSelectedQuestion(null);
   }, [selectedQuestion, rowSelectionModel]);
+
+  const handleExport = () => {
+    if (filteredQuestions.length === 0) return;
+    
+    const exportData = filteredQuestions.map(q => {
+      const correctIndex = q.options.findIndex(opt => opt.isCorrect);
+      const correctChar = ['A', 'B', 'C', 'D'][correctIndex] || 'A';
+      
+      return {
+        'Question': q.text,
+        'Option A': q.options[0]?.text || '',
+        'Option B': q.options[1]?.text || '',
+        'Option C': q.options[2]?.text || '',
+        'Option D': q.options[3]?.text || '',
+        'Correct Answer': correctChar,
+        'Marks': q.marks,
+        'Difficulty': q.difficulty === 'EASY' ? 'Easy' : (q.difficulty === 'HARD' ? 'Hard' : 'Medium'),
+        'Category': q.category?.name || 'General'
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Questions');
+    XLSX.writeFile(workbook, 'Question_Bank_Hackers_Mind.xlsx');
+  };
+
+  const handleDownloadTemplate = () => {
+    const templateData = [
+      {
+        'Question': 'SQL stands for?',
+        'Option A': 'Structured Query Language',
+        'Option B': 'Simple Query Language',
+        'Option C': 'Sequential Query Language',
+        'Option D': 'None',
+        'Correct Answer': 'A',
+        'Marks': 2,
+        'Difficulty': 'Easy',
+        'Category': 'SQL'
+      }
+    ];
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Template');
+    XLSX.writeFile(workbook, 'Question_Template.xlsx');
+  };
 
   return (
     <Box>
@@ -185,25 +220,34 @@ const QuestionBank = () => {
         title="Question Bank"
         subtitle="Manage and organize your question repository"
         action={
-          <>
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant="outlined"
+              startIcon={<Description />}
+              onClick={handleDownloadTemplate}
+              sx={{ display: { xs: 'none', md: 'flex' } }}
+            >
+              Download Template
+            </Button>
             <Button
               variant="outlined"
               startIcon={<CloudUpload />}
-              sx={{ display: { xs: 'none', sm: 'flex' } }}
+              onClick={() => setImportDialogOpen(true)}
             >
               Import
             </Button>
             <Button
               variant="outlined"
               startIcon={<CloudDownload />}
-              sx={{ display: { xs: 'none', sm: 'flex' } }}
+              onClick={handleExport}
+              disabled={filteredQuestions.length === 0}
             >
               Export
             </Button>
             <Button variant="contained" startIcon={<Add />}>
               Add Question
             </Button>
-          </>
+          </Stack>
         }
         breadcrumbs={[
           { label: 'Faculty' },
@@ -215,7 +259,7 @@ const QuestionBank = () => {
       <Card sx={{ mb: 3 }}>
         <CardContent sx={{ pb: '16px !important' }}>
           <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} sm={4} md={3}>
+            <Grid item xs={12} sm={4} md={4}>
               <TextField
                 fullWidth
                 size="small"
@@ -232,7 +276,7 @@ const QuestionBank = () => {
                 sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
               />
             </Grid>
-            <Grid item xs={6} sm={3} md={2}>
+            <Grid item xs={6} sm={4} md={3}>
               <FormControl fullWidth size="small">
                 <InputLabel>Subject</InputLabel>
                 <Select value={filterSubject} label="Subject" onChange={(e) => setFilterSubject(e.target.value)}>
@@ -241,7 +285,7 @@ const QuestionBank = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={6} sm={3} md={2}>
+            <Grid item xs={6} sm={4} md={3}>
               <FormControl fullWidth size="small">
                 <InputLabel>Difficulty</InputLabel>
                 <Select value={filterDifficulty} label="Difficulty" onChange={(e) => setFilterDifficulty(e.target.value)}>
@@ -250,28 +294,9 @@ const QuestionBank = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={6} sm={3} md={2}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Type</InputLabel>
-                <Select value={filterType} label="Type" onChange={(e) => setFilterType(e.target.value)}>
-                  <MenuItem value="all">All Types</MenuItem>
-                  {types.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={6} sm={3} md={1}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Status</InputLabel>
-                <Select value={filterStatus} label="Status" onChange={(e) => setFilterStatus(e.target.value)}>
-                  <MenuItem value="all">All</MenuItem>
-                  <MenuItem value="Active">Active</MenuItem>
-                  <MenuItem value="Archived">Archived</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
             <Grid item xs={12} sm={12} md={2}>
               <Stack direction="row" spacing={1}>
-                {(filterSubject !== 'all' || filterDifficulty !== 'all' || filterType !== 'all' || filterStatus !== 'all' || searchQuery) && (
+                {(filterSubject !== 'all' || filterDifficulty !== 'all' || searchQuery) && (
                   <Button
                     size="small"
                     color="inherit"
@@ -279,8 +304,6 @@ const QuestionBank = () => {
                       setSearchQuery('');
                       setFilterSubject('all');
                       setFilterDifficulty('all');
-                      setFilterType('all');
-                      setFilterStatus('all');
                     }}
                   >
                     Clear
@@ -309,15 +332,15 @@ const QuestionBank = () => {
 
       {/* Questions Table */}
       {loading ? (
-        <LoadingSkeleton type="table" rows={8} cols={8} />
+        <LoadingSkeleton type="table" rows={8} cols={7} />
       ) : error ? (
-        <ErrorState message="Failed to load questions" onRetry={handleRetry} />
+        <ErrorState message="Failed to load questions" onRetry={fetchQuestions} />
       ) : filteredQuestions.length === 0 ? (
         <EmptyState
-          title="No questions found"
-          message={searchQuery ? 'Try a different search term.' : 'Add your first question to get started.'}
-          actionLabel={searchQuery ? undefined : 'Add Question'}
-          onAction={searchQuery ? undefined : () => {}}
+          title="No questions found."
+          message={searchQuery ? 'Try a different search term.' : 'Import an Excel file or create a question manually.'}
+          actionLabel={searchQuery ? undefined : 'Import Questions'}
+          onAction={searchQuery ? undefined : () => setImportDialogOpen(true)}
         />
       ) : (
         <DataTable
@@ -368,7 +391,7 @@ const QuestionBank = () => {
         onConfirm={handleDelete}
         title="Delete Question"
         message="Are you sure you want to delete this question? This action cannot be undone."
-        itemName={selectedQuestion?.question}
+        itemName={selectedQuestion?.text}
       />
 
       <ConfirmDialog
@@ -378,7 +401,13 @@ const QuestionBank = () => {
         title="Archive Question"
         message="This question will be archived and hidden from active exams. You can restore it later."
         confirmLabel="Archive"
-        itemName={selectedQuestion?.question}
+        itemName={selectedQuestion?.text}
+      />
+
+      <QuestionImportDialog
+        open={importDialogOpen}
+        onClose={() => setImportDialogOpen(false)}
+        onSuccess={() => fetchQuestions()}
       />
     </Box>
   );

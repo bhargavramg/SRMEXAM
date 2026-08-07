@@ -43,13 +43,20 @@ router.put('/subjects/:id', admin.updateSubject);
 
 // Faculty Management
 router.get('/faculty', admin.getFacultyList);
+router.get('/faculty/:id', admin.getFacultyById);
 router.post('/faculty', admin.createFaculty);
 router.put('/faculty/:id', admin.updateFaculty);
+router.put('/faculty/:id/reset-password', admin.resetFacultyPassword);
+router.delete('/faculty/:id', admin.deleteFaculty);
 
 // Student Management
 router.get('/students', admin.getStudentList);
+router.get('/students/stats', admin.getStudentStats);
+router.get('/students/:id', admin.getStudentById);
 router.post('/students', admin.createStudent);
+router.post('/students/import', admin.importStudents);
 router.put('/students/:id', admin.updateStudent);
+router.delete('/students/:id', admin.deleteStudent);
 
 // Faculty Assignments
 router.get('/faculty-assignments', admin.getFacultyAssignments);
@@ -57,9 +64,18 @@ router.post('/faculty-assignments', admin.createFacultyAssignment);
 router.put('/faculty-assignments/:id', admin.updateFacultyAssignment);
 router.delete('/faculty-assignments/:id', admin.deleteFacultyAssignment);
 
-// Student Enrollments
-router.get('/student-enrollments', admin.getStudentEnrollments);
-router.post('/student-enrollments', admin.createStudentEnrollment);
-router.put('/student-enrollments/:id', admin.updateStudentEnrollment);
+// Assessment Types
+router.get('/assessment-types', admin.getAssessmentTypes);
+router.post('/assessment-types', admin.createAssessmentType);
+router.put('/assessment-types/:id', admin.updateAssessmentType);
+router.delete('/assessment-types/:id', admin.deleteAssessmentType);
+
+// University-Wide Exams & Results
+router.get('/exams', admin.getExams);
+router.get('/results', admin.getResults);
+router.put('/exams/:examId/unlock-results', admin.unlockResults);
+
+// Audit Logs
+router.get('/audit-logs', admin.getAuditLogs);
 
 module.exports = router;

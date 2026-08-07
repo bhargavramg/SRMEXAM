@@ -1,17 +1,27 @@
 import React from 'react';
 import { Box, Drawer, List, ListItem, ListItemIcon, ListItemText, Typography, AppBar, Toolbar, Avatar, IconButton } from '@mui/material';
 import { BookOpen, LayoutDashboard, FileText, Bell, Settings, LogOut, Menu } from 'lucide-react';
-import { useNavigate, Outlet } from 'react-router-dom';
+import { useNavigate, Outlet, useLocation } from 'react-router-dom';
+import TopNavbar from '../components/layout/TopNavbar';
+import { useAuth } from '../contexts/AuthContext';
 
 const drawerWidth = 260;
 
 const DashboardLayout = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const pathname = location.pathname;
 
-  const location = window.location.pathname;
+  const { logout } = useAuth();
+  const [mobileOpen, setMobileOpen] = React.useState(false);
 
   const handleLogout = () => {
+    logout();
     navigate('/login');
+  };
+
+  const handleDrawerToggle = () => {
+    setMobileOpen(!mobileOpen);
   };
 
   const menuItems = [
@@ -23,27 +33,7 @@ const DashboardLayout = () => {
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
-      {/* App Bar */}
-      <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, bgcolor: 'white', color: 'text.primary', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
-        <Toolbar>
-          <Box sx={{ display: 'flex', alignItems: 'center', width: drawerWidth - 24 }}>
-            <BookOpen color="#1565C0" size={28} />
-            <Typography variant="h6" noWrap component="div" sx={{ ml: 2, fontWeight: 700, color: 'primary.main' }}>
-              ExamPortal
-            </Typography>
-          </Box>
-          <Box sx={{ flexGrow: 1 }} />
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <IconButton color="primary">
-              <Bell size={20} />
-            </IconButton>
-            <Avatar sx={{ bgcolor: 'primary.light', width: 36, height: 36 }}>S</Avatar>
-            <Typography variant="subtitle2" sx={{ display: { xs: 'none', sm: 'block' }, fontWeight: 600 }}>
-              Student
-            </Typography>
-          </Box>
-        </Toolbar>
-      </AppBar>
+      <TopNavbar onMenuClick={handleDrawerToggle} isMobile={false} role="Student" />
 
       {/* Sidebar */}
       <Drawer
@@ -58,7 +48,7 @@ const DashboardLayout = () => {
         <Box sx={{ overflow: 'auto', mt: 3, px: 2 }}>
           <List>
             {menuItems.map((item) => {
-              const isActive = location.startsWith(item.path);
+              const isActive = pathname.startsWith(item.path);
               return (
                 <ListItem 
                   button 
