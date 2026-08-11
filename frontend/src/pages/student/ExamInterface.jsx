@@ -3,6 +3,9 @@ import { Box, Typography, Button, Card, CardContent, CircularProgress, Radio, Ra
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import studentApi from '../../api/studentApi';
+import { useSnackbar } from 'notistack';
+import SubmitExamModal from './components/SubmitExamModal';
+import ExamSuccessScreen from './components/ExamSuccessScreen';
 import { useAuth } from '../../contexts/AuthContext';
 import { io } from 'socket.io-client';
 import { Flag, ChevronLeft, ChevronRight, Save, CheckCircle, Clock } from 'lucide-react';
@@ -11,6 +14,7 @@ const ExamInterface = () => {
   const { examId, sessionId } = useParams();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { enqueueSnackbar } = useSnackbar();
   
   const [answers, setAnswers] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -19,6 +23,10 @@ const ExamInterface = () => {
   const [warningMessage, setWarningMessage] = useState("");
   const [timeLeft, setTimeLeft] = useState(null);
   
+  // New States for Submission Flow
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [submissionStatus, setSubmissionStatus] = useState('idle'); // idle | submitting | success | error
+
   // New States for Single-Question View
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [reviewStatus, setReviewStatus] = useState({}); // { [questionId]: 'marked' | 'visited' }
@@ -82,7 +90,7 @@ const ExamInterface = () => {
     }
 
     socket.on('session_terminated', () => {
-      alert("Your session has been terminated because a new login was detected.");
+      enqueueSnackbar("Your session has been terminated because a new login was detected.", { variant: 'error', persist: true });
       logout();
     });
 
@@ -109,7 +117,7 @@ const ExamInterface = () => {
     const handlePopState = (e) => {
       e.preventDefault();
       window.history.pushState(null, "", window.location.href);
-      alert("Navigation is disabled during the examination.");
+      enqueueSnackbar("Navigation is disabled during the examination.", { variant: 'warning' });
     };
     
     // Prevent accidental tab close
@@ -271,17 +279,19 @@ const ExamInterface = () => {
   };
 
   const forceSubmitExam = async (reason) => {
-    if (submitting) return;
-    setSubmitting(true);
-    alert(reason);
+    if (submissionStatus === 'submitting' || submissionStatus === 'success') return;
+    setSubmissionStatus('submitting');
+    enqueueSnackbar(reason, { variant: 'warning', persist: true });
     try {
       const result = await studentApi.submitExam(sessionId, getEnhancedAnswers(), true);
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(console.error);
       }
-      navigate(`/student/exam/${examId}/result`, { state: { result }, replace: true });
+      setSubmissionStatus('success');
     } catch (error) {
       console.error("Failed to auto-submit", error);
+      const backendError = error.response?.data?.details || error.response?.data?.error || error.message || 'Unknown error';
+      enqueueSnackbar(`Auto-Submission failed. HTTP: ${error.response?.status || 500} - ${backendError}`, { variant: 'error', persist: true });
       if (document.fullscreenElement) document.exitFullscreen().catch(console.error);
       navigate('/student/dashboard', { replace: true });
     }
@@ -291,19 +301,46 @@ const ExamInterface = () => {
     setAnswers(prev => ({ ...prev, [questionId]: optionId }));
   };
 
-  const handleSubmit = async () => {
-    if (!window.confirm("Are you sure you want to submit your exam? You cannot undo this action.")) return;
-    setSubmitting(true);
+  const calculateStats = () => {
+    if (!questionsData?.questions) return { total: 0, answered: 0, unanswered: 0, marked: 0, remainingTime: "00:00" };
+    const total = questionsData.questions.length;
+    let answered = 0;
+    let marked = 0;
+    
+    questionsData.questions.forEach(q => {
+      if (answers[q.id]) answered++;
+      if (reviewStatus[q.id] === 'marked') marked++;
+    });
+    
+    return {
+      total,
+      answered,
+      unanswered: total - answered,
+      marked,
+      remainingTime: formatTime(timeLeft)
+    };
+  };
+
+  const handleSubmitClick = () => {
+    setShowSubmitModal(true);
+  };
+
+  const confirmSubmit = async () => {
+    setShowSubmitModal(false);
+    if (submissionStatus === 'submitting' || submissionStatus === 'success') return;
+    setSubmissionStatus('submitting');
     try {
       const result = await studentApi.submitExam(sessionId, getEnhancedAnswers(), false);
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(console.error);
       }
-      navigate(`/student/exam/${examId}/result`, { state: { result }, replace: true });
+      setSubmissionStatus('success');
     } catch (error) {
       console.error("Failed to submit exam", error);
-      alert("Failed to submit exam. Please try again.");
-      setSubmitting(false);
+      const backendError = error.response?.data?.details || error.response?.data?.error || error.message || 'Unknown error';
+      enqueueSnackbar(`Submission failed. HTTP: ${error.response?.status || 500} - ${backendError}`, { variant: 'error', persist: true });
+      setSubmissionStatus('error');
+      setTimeout(() => setSubmissionStatus('idle'), 500);
     }
   };
 
@@ -375,6 +412,24 @@ const ExamInterface = () => {
     return color === '#E0E0E0' ? '#333' : '#FFF';
   };
 
+  if (submissionStatus === 'success') {
+    return <ExamSuccessScreen examTitle={examDetails?.title} attemptNumber={1} />;
+  }
+
+  if (submissionStatus === 'submitting') {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', alignItems: 'center', justifyContent: 'center', bgcolor: '#F8FAFC', userSelect: 'none' }}>
+        <CircularProgress size={60} thickness={4} sx={{ mb: 4, color: 'primary.main' }} />
+        <Typography variant="h5" fontWeight={600} gutterBottom>
+          Submitting your examination...
+        </Typography>
+        <Typography variant="body1" color="text.secondary">
+          Please do not close this page.
+        </Typography>
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', userSelect: 'none' }}>
       {/* Top Bar */}
@@ -397,8 +452,8 @@ const ExamInterface = () => {
           <Button 
             variant="contained" 
             color="success"
-            onClick={handleSubmit}
-            disabled={submitting}
+            onClick={handleSubmitClick}
+            disabled={submissionStatus !== 'idle'}
             startIcon={<CheckCircle size={20} />}
             sx={{ fontWeight: 'bold' }}
           >
@@ -611,6 +666,13 @@ const ExamInterface = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <SubmitExamModal 
+        open={showSubmitModal} 
+        onClose={() => setShowSubmitModal(false)} 
+        onConfirm={confirmSubmit} 
+        stats={calculateStats()} 
+      />
     </Box>
   );
 };

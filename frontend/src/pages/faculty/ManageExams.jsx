@@ -6,10 +6,16 @@ import { useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
 import { DataTable } from '../../components/tables';
 import { Edit, PlayArrow, Publish, Delete, Assessment } from '@mui/icons-material';
+import { useSnackbar } from 'notistack';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 const ManageExams = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { enqueueSnackbar } = useSnackbar();
+  
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [examToPublish, setExamToPublish] = useState(null);
 
   const { data: exams = [], isLoading } = useQuery({
     queryKey: ['exams'],
@@ -18,14 +24,24 @@ const ManageExams = () => {
 
   const publishMutation = useMutation({
     mutationFn: (id) => facultyApi.publishExam(id, {}),
-    onSuccess: () => queryClient.invalidateQueries(['exams']),
-    onError: (err) => alert("Error publishing exam: " + (err.response?.data?.error || err.message))
+    onSuccess: () => {
+      queryClient.invalidateQueries(['exams']);
+      enqueueSnackbar('Exam published successfully', { variant: 'success' });
+    },
+    onError: (err) => enqueueSnackbar("Error publishing exam: " + (err.response?.data?.error || err.message), { variant: 'error' })
   });
 
   const handlePublish = (id) => {
-    if (window.confirm("Are you sure you want to publish this exam? This will notify eligible students.")) {
-      publishMutation.mutate(id);
+    setExamToPublish(id);
+    setConfirmOpen(true);
+  };
+
+  const confirmPublish = () => {
+    if (examToPublish) {
+      publishMutation.mutate(examToPublish);
     }
+    setConfirmOpen(false);
+    setExamToPublish(null);
   };
 
   const columns = [
@@ -105,6 +121,17 @@ const ManageExams = () => {
           />
         </CardContent>
       </Card>
+      
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Publish Exam"
+        message="Are you sure you want to publish this exam?"
+        warningText="This will notify eligible students and they will be able to take the exam."
+        confirmText="Publish"
+        confirmColor="primary"
+        onConfirm={confirmPublish}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </Box>
   );
 };

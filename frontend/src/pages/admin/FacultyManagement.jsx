@@ -14,10 +14,13 @@ import { useNavigate } from 'react-router-dom';
 import adminApi from '../../api/adminApi';
 import PageHeader from '../../components/PageHeader';
 import FacultyDialogs from './components/FacultyDialogs';
+import { useSnackbar } from 'notistack';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 const FacultyManagement = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { enqueueSnackbar } = useSnackbar();
 
   // Filters & Pagination State
   const [page, setPage] = useState(0);
@@ -27,6 +30,7 @@ const FacultyManagement = () => {
 
   // Dialog State
   const [dialogState, setDialogState] = useState({ type: null, data: null }); // type: 'add' | 'edit'
+  const [confirmState, setConfirmState] = useState({ open: false, type: null, data: null }); // type: 'delete' | 'reset'
 
   // Menu State
   const [anchorEl, setAnchorEl] = useState(null);
@@ -47,17 +51,18 @@ const FacultyManagement = () => {
   const resetPasswordMutation = useMutation({
     mutationFn: (id) => adminApi.resetFacultyPassword(id),
     onSuccess: () => {
-      alert('Password reset successfully.');
+      enqueueSnackbar('Password reset successfully.', { variant: 'success' });
     },
-    onError: (err) => alert(err.response?.data?.error || 'Error resetting password')
+    onError: (err) => enqueueSnackbar(err.response?.data?.error || 'Error resetting password', { variant: 'error' })
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id) => adminApi.deleteFaculty(id),
     onSuccess: () => {
       queryClient.invalidateQueries(['adminFaculty']);
+      enqueueSnackbar('Faculty deleted successfully', { variant: 'success' });
     },
-    onError: (err) => alert(err.response?.data?.error || 'Error deleting faculty')
+    onError: (err) => enqueueSnackbar(err.response?.data?.error || 'Error deleting faculty', { variant: 'error' })
   });
 
   // Handlers
@@ -82,17 +87,22 @@ const FacultyManagement = () => {
   };
 
   const handleResetPassword = () => {
-    if (window.confirm(`Are you sure you want to reset password for ${selectedFaculty.name}?`)) {
-      resetPasswordMutation.mutate(selectedFaculty.id);
-    }
+    setConfirmState({ open: true, type: 'reset', data: selectedFaculty });
     handleMenuClose();
   };
 
   const handleDelete = () => {
-    if (window.confirm(`Are you sure you want to delete ${selectedFaculty.name}?`)) {
-      deleteMutation.mutate(selectedFaculty.id);
-    }
+    setConfirmState({ open: true, type: 'delete', data: selectedFaculty });
     handleMenuClose();
+  };
+
+  const executeConfirmAction = () => {
+    if (confirmState.type === 'delete') {
+      deleteMutation.mutate(confirmState.data.id);
+    } else if (confirmState.type === 'reset') {
+      resetPasswordMutation.mutate(confirmState.data.id);
+    }
+    setConfirmState({ open: false, type: null, data: null });
   };
 
   const handleToggleStatus = () => {
@@ -336,6 +346,17 @@ const FacultyManagement = () => {
         type={dialogState.type}
         data={dialogState.data}
         onClose={() => setDialogState({ type: null, data: null })}
+      />
+
+      <ConfirmDialog
+        open={confirmState.open}
+        title={confirmState.type === 'delete' ? 'Delete Faculty' : 'Reset Password'}
+        message={`Are you sure you want to ${confirmState.type === 'delete' ? 'delete' : 'reset the password for'} ${confirmState.data?.name}?`}
+        warningText={confirmState.type === 'delete' ? 'This action cannot be undone and will remove all assignments for this faculty.' : ''}
+        confirmText={confirmState.type === 'delete' ? 'Delete' : 'Reset Password'}
+        confirmColor={confirmState.type === 'delete' ? 'error' : 'primary'}
+        onConfirm={executeConfirmAction}
+        onCancel={() => setConfirmState({ open: false, type: null, data: null })}
       />
     </Box>
   );

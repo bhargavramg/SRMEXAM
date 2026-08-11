@@ -10,11 +10,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import adminApi from '../../api/adminApi';
 import PageHeader from '../../components/PageHeader';
 import AssignSubjectModal from './components/AssignSubjectModal';
+import { useSnackbar } from 'notistack';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 const FacultyDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { enqueueSnackbar } = useSnackbar();
+  
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [assignmentToDelete, setAssignmentToDelete] = useState(null);
 
   const { data: faculty, isLoading, error } = useQuery({
     queryKey: ['adminFacultyDetails', id],
@@ -30,7 +36,7 @@ const FacultyDetails = () => {
     },
     onError: (err) => {
       console.error('Delete error details:', err);
-      alert(err?.error || err?.message || JSON.stringify(err) || 'Error deleting assignment');
+      enqueueSnackbar(err?.error || err?.message || JSON.stringify(err) || 'Error deleting assignment', { variant: 'error' });
     }
   });
 
@@ -54,9 +60,16 @@ const FacultyDetails = () => {
   }
 
   const handleDeleteAssignment = (assignmentId) => {
-    if (window.confirm("Are you sure you want to remove this assignment?")) {
-      deleteAssignmentMutation.mutate(assignmentId);
+    setAssignmentToDelete(assignmentId);
+    setConfirmOpen(true);
+  };
+
+  const confirmDeleteAssignment = () => {
+    if (assignmentToDelete) {
+      deleteAssignmentMutation.mutate(assignmentToDelete);
     }
+    setConfirmOpen(false);
+    setAssignmentToDelete(null);
   };
 
   return (
@@ -189,6 +202,20 @@ const FacultyDetails = () => {
         open={isAssignModalOpen} 
         onClose={() => setIsAssignModalOpen(false)} 
         facultyId={id} 
+      />
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Remove Assignment"
+        message="Are you sure you want to remove this assignment?"
+        warningText="Students enrolled in this subject will lose access to its exams."
+        confirmText="Remove"
+        confirmColor="error"
+        onConfirm={confirmDeleteAssignment}
+        onCancel={() => {
+          setConfirmOpen(false);
+          setAssignmentToDelete(null);
+        }}
       />
     </Box>
   );

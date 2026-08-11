@@ -591,7 +591,12 @@ exports.submitExam = async (req, res) => {
 
     const session = await prisma.examSession.findUnique({
       where: { id: sessionId },
-      include: { exam: true }
+      include: { 
+        exam: {
+          include: { facultyAssignment: true }
+        },
+        student: true
+      }
     });
 
     if (!session || session.studentId !== studentId) {
@@ -842,8 +847,20 @@ exports.submitExam = async (req, res) => {
       examTitle: session.exam.title,
     });
   } catch (error) {
-    console.error('Submit exam error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('Submit exam error [CRITICAL]:', {
+      error: error,
+      message: error.message,
+      stack: error.stack,
+      prismaCode: error.code,
+      prismaMeta: error.meta,
+      sessionId: req.params.sessionId,
+      studentId: req.user?.id,
+    });
+    res.status(500).json({ 
+      error: 'Submission failed', 
+      details: error.message,
+      prismaCode: error.code 
+    });
   }
 };
 

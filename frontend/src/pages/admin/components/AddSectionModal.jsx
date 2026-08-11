@@ -5,9 +5,11 @@ import {
 } from '@mui/material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import adminApi from '../../../api/adminApi';
+import { useSnackbar } from 'notistack';
 
 const AddSectionModal = ({ open, onClose }) => {
   const queryClient = useQueryClient();
+  const { enqueueSnackbar } = useSnackbar();
   const [formData, setFormData] = useState({
     semesterId: '',
     name: '',
@@ -26,7 +28,7 @@ const AddSectionModal = ({ open, onClose }) => {
       handleClose();
     },
     onError: (err) => {
-      alert(err.error || 'Failed to create section');
+      enqueueSnackbar(err.error || 'Failed to create section', { variant: 'error' });
     }
   });
 

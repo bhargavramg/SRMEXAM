@@ -5,9 +5,11 @@ import {
 } from '@mui/material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import adminApi from '../../../api/adminApi';
+import { useSnackbar } from 'notistack';
 
 const AssignSubjectModal = ({ open, onClose, facultyId }) => {
   const queryClient = useQueryClient();
+  const { enqueueSnackbar } = useSnackbar();
 
   const [formData, setFormData] = useState({
     academicYearId: '',
@@ -41,7 +43,7 @@ const AssignSubjectModal = ({ open, onClose, facultyId }) => {
       onClose();
     },
     onError: (error) => {
-      alert(error.response?.data?.error || error.message || 'Failed to assign subject');
+      enqueueSnackbar(error.response?.data?.error || error.message || 'Failed to assign subject', { variant: 'error' });
     }
   });
 
@@ -51,7 +53,7 @@ const AssignSubjectModal = ({ open, onClose, facultyId }) => {
 
   const handleSave = () => {
     if (!formData.subjectId || !formData.assessmentTypeId) {
-      alert('Please fill all required fields');
+      enqueueSnackbar('Please fill all required fields', { variant: 'warning' });
       return;
     }
     assignMutation.mutate({

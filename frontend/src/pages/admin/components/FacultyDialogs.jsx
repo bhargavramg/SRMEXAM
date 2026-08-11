@@ -6,9 +6,11 @@ import {
 import { useForm, Controller } from 'react-hook-form';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import adminApi from '../../../api/adminApi';
+import { useSnackbar } from 'notistack';
 
 const FacultyDialogs = ({ open, type, data, onClose }) => {
   const queryClient = useQueryClient();
+  const { enqueueSnackbar } = useSnackbar();
   const isEdit = type === 'edit';
 
   const { control, handleSubmit, reset, formState: { errors } } = useForm({
@@ -55,10 +57,11 @@ const FacultyDialogs = ({ open, type, data, onClose }) => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['adminFaculty']);
+      enqueueSnackbar(isEdit ? 'Faculty updated successfully' : 'Faculty created successfully', { variant: 'success' });
       onClose();
     },
     onError: (err) => {
-      alert(err.response?.data?.error || 'An error occurred');
+      enqueueSnackbar(err.response?.data?.error || 'An error occurred', { variant: 'error' });
     }
   });
 

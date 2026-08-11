@@ -7,6 +7,7 @@ import {
 } from '@mui/material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { useSnackbar } from 'notistack';
 import facultyApi from '../../api/facultyApi';
 import PageHeader from '../../components/PageHeader';
 import { DataTable } from '../../components/tables';
@@ -33,6 +34,7 @@ const statusLabels = {
 export default function StudentResults() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { enqueueSnackbar } = useSnackbar();
   const [selectedExam, setSelectedExam] = useState('');
   const [publishModalOpen, setPublishModalOpen] = useState(false);
   const [unpublishModalOpen, setUnpublishModalOpen] = useState(false);
@@ -46,7 +48,7 @@ export default function StudentResults() {
   });
 
   // Fetch submissions for selected exam
-  const { data: submissionsData, isLoading: loadingSubmissions } = useQuery({
+  const { data: submissionsData, isLoading: loadingSubmissions, isError: submissionError, isSuccess: submissionSuccess } = useQuery({
     queryKey: ['examSubmissions', selectedExam],
     queryFn: () => facultyApi.getExamSubmissions(selectedExam),
     enabled: !!selectedExam,
@@ -63,6 +65,8 @@ export default function StudentResults() {
   const exams = dashboard?.exams || [];
   const submissions = submissionsData?.submissions || [];
   const examInfo = submissionsData?.exam;
+  const selectedExamDetails = exams.find(e => e.id === selectedExam);
+  const dropdownSubmissionCount = selectedExamDetails?.totalSubmissions || 0;
 
   // Check if current exam results are already published
   const isExamPublished = submissions.some(s => s.published === true);
@@ -92,7 +96,7 @@ export default function StudentResults() {
       queryClient.invalidateQueries(['examSubmissions', selectedExam]);
       queryClient.invalidateQueries(['resultsDashboard']);
     } catch (err) {
-      alert(err?.response?.data?.error || 'Failed to publish');
+      enqueueSnackbar(err?.response?.data?.error || 'Failed to publish', { variant: 'error' });
     } finally {
       setIsPublishing(false);
     }
@@ -106,7 +110,7 @@ export default function StudentResults() {
       queryClient.invalidateQueries(['examSubmissions', selectedExam]);
       queryClient.invalidateQueries(['resultsDashboard']);
     } catch (err) {
-      alert(err?.response?.data?.error || 'Failed to unpublish');
+      enqueueSnackbar(err?.response?.data?.error || 'Failed to unpublish', { variant: 'error' });
     } finally {
       setIsUnpublishing(false);
     }
@@ -313,8 +317,25 @@ export default function StudentResults() {
         <Card sx={{ borderRadius: 3, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
           <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
             {loadingSubmissions ? (
-              <Box sx={{ p: 4, textAlign: 'center' }}><CircularProgress /></Box>
-            ) : submissions.length === 0 ? (
+              <Box sx={{ p: 6, textAlign: 'center' }}>
+                <CircularProgress />
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>Loading submissions...</Typography>
+              </Box>
+            ) : submissionError ? (
+              <Box sx={{ p: 6, textAlign: 'center' }}>
+                <AlertTriangle size={48} color="#EF4444" />
+                <Typography variant="h6" color="error" sx={{ mt: 1 }}>Failed to load submissions</Typography>
+                <Typography variant="body2" color="text.secondary">There was an error communicating with the server.</Typography>
+              </Box>
+            ) : submissionSuccess && dropdownSubmissionCount > 0 && submissions.length === 0 ? (
+              <Box sx={{ p: 6, textAlign: 'center' }}>
+                <AlertTriangle size={48} color="#EF4444" />
+                <Typography variant="h6" color="error" sx={{ mt: 1 }}>Inconsistent Data Warning</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Submission count is {dropdownSubmissionCount}, but no records were found. Please contact support.
+                </Typography>
+              </Box>
+            ) : submissionSuccess && submissions.length === 0 ? (
               <Box sx={{ p: 6, textAlign: 'center' }}>
                 <AlertTriangle size={48} color="#F59E0B" />
                 <Typography variant="h6" color="text.secondary" sx={{ mt: 1 }}>No submissions yet</Typography>

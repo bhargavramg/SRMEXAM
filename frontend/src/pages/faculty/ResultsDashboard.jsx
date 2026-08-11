@@ -4,8 +4,9 @@ import {
   Select, MenuItem, FormControl, InputLabel, IconButton, Tooltip, Paper, Divider,
   Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Alert
 } from '@mui/material';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { useSnackbar } from 'notistack';
 import facultyApi from '../../api/facultyApi';
 import PageHeader from '../../components/PageHeader';
 import { DataTable } from '../../components/tables';
@@ -32,6 +33,8 @@ const statusLabels = {
 
 export default function ResultsDashboard() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { enqueueSnackbar } = useSnackbar();
   const [selectedExam, setSelectedExam] = useState('');
 
   // Fetch dashboard stats
@@ -99,9 +102,11 @@ export default function ResultsDashboard() {
       setIsPublishing(true);
       await facultyApi.publishResults(selectedExam);
       setPublishModalOpen(false);
-      window.location.reload();
+      queryClient.invalidateQueries({ queryKey: ['resultsDashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['publishReadyExams'] });
+      queryClient.invalidateQueries({ queryKey: ['examSubmissions'] });
     } catch (err) {
-      alert(err?.response?.data?.error || 'Failed to publish');
+      enqueueSnackbar(err?.response?.data?.error || 'Failed to publish', { variant: 'error' });
     } finally {
       setIsPublishing(false);
     }

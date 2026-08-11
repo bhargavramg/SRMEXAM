@@ -21,6 +21,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import facultyApi from '../../api/facultyApi';
 import { useNavigate } from 'react-router-dom';
 import StudentAssignmentStep from './components/StudentAssignmentStep';
+import { useSnackbar } from 'notistack';
 
 const steps = ['Exam Details', 'Schedule', 'Questions', 'Configuration', 'Student Assignment', 'Review'];
 
@@ -50,6 +51,7 @@ const CreateExamWizard = () => {
   const [successDialogOpen, setSuccessDialogOpen] = useState(false);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { enqueueSnackbar } = useSnackbar();
 
   const methods = useForm({
     resolver: zodResolver(examSchema),
@@ -101,8 +103,7 @@ const CreateExamWizard = () => {
       setSuccessDialogOpen(true);
     },
     onError: (err) => {
-      // Axios interceptor returns the data object directly, so err is already the parsed JSON body
-      alert("Failed to create exam: " + (err.error || err.message || 'Unknown error'));
+      enqueueSnackbar("Failed to create exam: " + (err.error || err.message || 'Unknown error'), { variant: 'error' });
     }
   });
 

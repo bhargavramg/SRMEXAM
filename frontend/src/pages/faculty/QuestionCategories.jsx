@@ -12,6 +12,7 @@ import { HelpCircle } from 'lucide-react';
 import facultyApi from '../../api/facultyApi';
 import { useSnackbar } from 'notistack';
 import { format } from 'date-fns';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 const QuestionCategories = () => {
   const [categories, setCategories] = useState([]);
@@ -22,6 +23,8 @@ const QuestionCategories = () => {
   const [openDialog, setOpenDialog] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentCategory, setCurrentCategory] = useState({ id: null, name: '', description: '', color: '#1976d2' });
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [categoryToDelete, setCategoryToDelete] = useState(null);
   
   // Analytics Dialog State
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
@@ -98,14 +101,22 @@ const QuestionCategories = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this category?')) return;
+    setCategoryToDelete(id);
+    setConfirmOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!categoryToDelete) return;
     try {
-      await facultyApi.deleteCategory(id);
+      await facultyApi.deleteCategory(categoryToDelete);
       enqueueSnackbar('Category deleted successfully', { variant: 'success' });
       fetchCategories();
     } catch (err) {
       const msg = err.error || err.response?.data?.error || 'Failed to delete category';
       enqueueSnackbar(msg, { variant: 'error' });
+    } finally {
+      setConfirmOpen(false);
+      setCategoryToDelete(null);
     }
   };
 
@@ -358,6 +369,17 @@ const QuestionCategories = () => {
           <Button onClick={() => setAnalyticsOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Delete Category"
+        message="Are you sure you want to delete this category?"
+        warningText="Questions in this category will not be deleted but will lose this categorization."
+        confirmText="Delete"
+        confirmColor="error"
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </Box>
   );
 };

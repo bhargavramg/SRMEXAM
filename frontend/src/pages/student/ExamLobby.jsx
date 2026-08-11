@@ -3,10 +3,12 @@ import { Box, Typography, Button, Card, CardContent, CircularProgress } from '@m
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import studentApi from '../../api/studentApi';
+import { useSnackbar } from 'notistack';
 
 const ExamLobby = () => {
   const { examId } = useParams();
   const navigate = useNavigate();
+  const { enqueueSnackbar } = useSnackbar();
   const [starting, setStarting] = React.useState(false);
   const [showLoadingScreen, setShowLoadingScreen] = React.useState(false);
 
@@ -31,7 +33,7 @@ const ExamLobby = () => {
         
         // Strictly verify fullscreen as per requirements
         if (document.fullscreenElement === null) {
-          alert("Fullscreen permission is required to start this examination.");
+          enqueueSnackbar("Fullscreen permission is required to start this examination.", { variant: 'error' });
           return;
         }
       }
@@ -47,7 +49,7 @@ const ExamLobby = () => {
 
     } catch (error) {
       console.error("Failed to start exam backend response:", error);
-      alert("Failed to start exam: " + (error.error || error.message || 'Unknown error'));
+      enqueueSnackbar("Failed to start exam: " + (error.error || error.message || 'Unknown error'), { variant: 'error' });
       setStarting(false);
       setShowLoadingScreen(false);
       if (document.fullscreenElement) {

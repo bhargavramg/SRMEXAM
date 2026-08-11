@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { Box, Button, Typography, Chip, Paper } from '@mui/material';
 import { CloudUpload, InsertDriveFile, Close } from '@mui/icons-material';
 import { useController } from 'react-hook-form';
+import { useSnackbar } from 'notistack';
 
 const FormFileUpload = ({
   name, control, label, rules,
@@ -13,6 +14,8 @@ const FormFileUpload = ({
     field: { onChange, value },
     fieldState: { error },
   } = useController({ name, control, rules });
+  
+  const { enqueueSnackbar } = useSnackbar();
 
   const files = value ? (Array.isArray(value) ? value : [value]) : [];
 
@@ -21,7 +24,7 @@ const FormFileUpload = ({
     if (maxSize) {
       const oversized = selected.filter(f => f.size > maxSize);
       if (oversized.length) {
-        alert(`File(s) exceed maximum size of ${Math.round(maxSize / 1024 / 1024)}MB`);
+        enqueueSnackbar(`File(s) exceed maximum size of ${Math.round(maxSize / 1024 / 1024)}MB`, { variant: 'error' });
         return;
       }
     }

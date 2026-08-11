@@ -18,10 +18,13 @@ import PageHeader from '../../components/PageHeader';
 import * as XLSX from 'xlsx';
 import AddStudentModal from './components/AddStudentModal';
 import ImportStudentsModal from './components/ImportStudentsModal';
+import { useSnackbar } from 'notistack';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 const StudentManagement = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { enqueueSnackbar } = useSnackbar();
 
   // Filters & Pagination State
   const [page, setPage] = useState(0);
@@ -32,6 +35,7 @@ const StudentManagement = () => {
   // Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   // Menu State
   const [anchorEl, setAnchorEl] = useState(null);
@@ -58,8 +62,9 @@ const StudentManagement = () => {
       queryClient.invalidateQueries(['adminStudents']);
       queryClient.invalidateQueries(['adminStudentStats']);
       setIsAddModalOpen(false);
+      enqueueSnackbar('Student added successfully', { variant: 'success' });
     },
-    onError: (err) => alert(err.response?.data?.error || 'Error adding student')
+    onError: (err) => enqueueSnackbar(err.response?.data?.error || 'Error adding student', { variant: 'error' })
   });
 
   const importMutation = useMutation({
@@ -68,8 +73,9 @@ const StudentManagement = () => {
       queryClient.invalidateQueries(['adminStudents']);
       queryClient.invalidateQueries(['adminStudentStats']);
       setIsImportModalOpen(false);
+      enqueueSnackbar('Students imported successfully', { variant: 'success' });
     },
-    onError: (err) => alert(err.response?.data?.error || 'Error importing students')
+    onError: (err) => enqueueSnackbar(err.response?.data?.error || 'Error importing students', { variant: 'error' })
   });
 
   const updateStatusMutation = useMutation({
@@ -82,8 +88,9 @@ const StudentManagement = () => {
     onSuccess: () => {
       queryClient.invalidateQueries(['adminStudents']);
       queryClient.invalidateQueries(['adminStudentStats']);
+      enqueueSnackbar('Student deleted successfully', { variant: 'success' });
     },
-    onError: (err) => alert(err.response?.data?.error || 'Error deleting student')
+    onError: (err) => enqueueSnackbar(err.response?.data?.error || 'Error deleting student', { variant: 'error' })
   });
 
   // Handlers
@@ -109,10 +116,15 @@ const StudentManagement = () => {
   };
 
   const handleDelete = () => {
-    if (window.confirm(`Are you sure you want to delete ${selectedStudent.name}?`)) {
+    setConfirmOpen(true);
+    handleMenuClose();
+  };
+
+  const executeDelete = () => {
+    if (selectedStudent) {
       deleteMutation.mutate(selectedStudent.id);
     }
-    handleMenuClose();
+    setConfirmOpen(false);
   };
 
   const statCards = [
@@ -124,7 +136,7 @@ const StudentManagement = () => {
 
   const handleExport = () => {
     if (!listData?.content || listData.content.length === 0) {
-      alert("No data available to export");
+      enqueueSnackbar("No data available to export", { variant: 'warning' });
       return;
     }
     const exportData = listData.content.map(student => {
@@ -318,6 +330,16 @@ const StudentManagement = () => {
         isLoading={importMutation.isLoading}
       />
 
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Delete Student"
+        message={`Are you sure you want to delete ${selectedStudent?.name}?`}
+        warningText="This action cannot be undone and will remove all enrollments and exam results for this student."
+        confirmText="Delete"
+        confirmColor="error"
+        onConfirm={executeDelete}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </Box>
   );
 };

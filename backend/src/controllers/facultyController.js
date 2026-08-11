@@ -519,7 +519,12 @@ exports.getResultsDashboard = async (req, res) => {
       where: { facultyAssignmentId: { in: assignmentIds } },
       include: {
         facultyAssignment: { include: { subject: true,  } },
-        _count: { select: { results: true, sessions: true } }
+        _count: { 
+          select: { 
+            results: true, 
+            sessions: { where: { status: { in: ['SUBMITTED', 'AUTO_SUBMITTED', 'EVALUATED'] } } } 
+          } 
+        }
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -562,7 +567,7 @@ exports.getResultsDashboard = async (req, res) => {
         section: '-',
         semester: '-',
         status: e.status,
-        totalSubmissions: e._count.results,
+        totalSubmissions: e._count.sessions,
         totalSessions: e._count.sessions,
         startTime: e.startTime,
         endTime: e.endTime,
@@ -601,16 +606,12 @@ exports.getExamSubmissions = async (req, res) => {
     }
 
     const sessions = await prisma.examSession.findMany({
-      where: { examId, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] } },
+      where: { examId, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED', 'EVALUATED'] } },
       include: {
         student: {
           select: {
             id: true, name: true, register_no: true, email: true,
-            department: { select: { name: true, code: true } },
-            enrollments: {
-              where: { status: 'ACTIVE' },
-              include: {  semester: true }
-            }
+            department: { select: { name: true, code: true } }
           }
         },
         _count: { select: { warnings: true, studentAnswers: true } }
@@ -643,7 +644,7 @@ exports.getExamSubmissions = async (req, res) => {
         department: session.student.department?.name,
         departmentCode: session.student.department?.code,
         section: '-',
-        semester: session.student.enrollments[0]?.semester?.semesterNumber || '-',
+        semester: '-',
         submittedAt: session.submittedAt,
         timeTaken: session.timeTaken,
         submissionType: session.submissionType,
@@ -693,11 +694,7 @@ exports.getSubmissionDetail = async (req, res) => {
         student: {
           select: {
             id: true, name: true, register_no: true, email: true,
-            department: { select: { name: true, code: true } },
-            enrollments: {
-              where: { status: 'ACTIVE' },
-              include: {  semester: true }
-            }
+            department: { select: { name: true, code: true } }
           }
         },
         studentAnswers: {
@@ -727,7 +724,7 @@ exports.getSubmissionDetail = async (req, res) => {
     const allSessions = await prisma.examSession.findMany({
       where: {
         examId: session.examId,
-        status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] }
+        status: { in: ['SUBMITTED', 'AUTO_SUBMITTED', 'EVALUATED'] }
       },
       select: { id: true, studentId: true },
       orderBy: { submittedAt: 'asc' }
@@ -762,7 +759,7 @@ exports.getSubmissionDetail = async (req, res) => {
         department: session.student.department?.name,
         departmentCode: session.student.department?.code,
         section: '-',
-        semester: session.student.enrollments[0]?.semester?.semesterNumber || '-',
+        semester: '-',
       },
       exam: {
         id: session.exam.id,
@@ -773,9 +770,12 @@ exports.getSubmissionDetail = async (req, res) => {
         passingMarks: session.exam.passingMarks,
         durationMins: session.exam.durationMins,
       },
-      answers: session.studentAnswers.map(a => ({
+      answers: session.studentAnswers
+        .filter((a, index, self) => self.findIndex(t => t.questionId === a.questionId) === index)
+        .map((a, index) => ({
         id: a.id,
         questionId: a.questionId,
+        questionNumber: index + 1,
         questionText: a.question.text,
         questionType: a.question.type,
         questionMarks: a.question.marks,
@@ -991,7 +991,6 @@ exports.completeEvaluation = async (req, res) => {
       data: {
         obtainedMarks: totalObtained,
         objectiveMarks,
-        descriptiveMarks,
         percentage,
       }
     });
@@ -1007,7 +1006,6 @@ exports.completeEvaluation = async (req, res) => {
         data: {
           marksObtained: totalObtained,
           objectiveMarks,
-          descriptiveMarks,
           percentage,
           isPass: gradeInfo.isPass,
           grade: gradeInfo.grade,
@@ -1402,14 +1400,229 @@ exports.getStudents = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
-exports.exportStudents = async (req, res) => res.status(501).json({ error: 'Not implemented' });
-exports.importStudents = async (req, res) => res.status(501).json({ error: 'Not implemented' });
-exports.getStudentById = async (req, res) => res.status(501).json({ error: 'Not implemented' });
-exports.createStudent = async (req, res) => res.status(501).json({ error: 'Not implemented' });
-exports.updateStudent = async (req, res) => res.status(501).json({ error: 'Not implemented' });
-exports.resetStudentPassword = async (req, res) => res.status(501).json({ error: 'Not implemented' });
-exports.updateStudentStatus = async (req, res) => res.status(501).json({ error: 'Not implemented' });
-exports.deleteStudent = async (req, res) => res.status(501).json({ error: 'Not implemented' });
+// ============================================================================
+// FACULTY STUDENT MANAGEMENT — Full CRUD
+// ============================================================================
+const bcrypt = require('bcrypt');
+
+exports.exportStudents = async (req, res) => {
+  try {
+    const assignmentIds = await getFacultyAssignmentIds(req.user.id);
+    const assignmentStudents = await prisma.assignmentStudent.findMany({
+      where: { assignmentId: { in: assignmentIds } },
+      include: {
+        student: { select: { id: true, name: true, email: true, register_no: true, status: true, phone: true, createdAt: true } },
+        assignment: { include: { subject: true } }
+      }
+    });
+    const rows = assignmentStudents.map(as => ({
+      'Register No': as.student.register_no || '',
+      'Name': as.student.name,
+      'Email': as.student.email,
+      'Phone': as.student.phone || '',
+      'Subject': as.assignment.subject?.name || '',
+      'Status': as.student.status,
+      'Created': as.student.createdAt?.toISOString?.() || ''
+    }));
+    res.json(rows);
+  } catch (error) {
+    console.error('exportStudents error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.importStudents = async (req, res) => {
+  try {
+    const { students, assignmentId } = req.body;
+    if (!students || !Array.isArray(students) || students.length === 0) {
+      return res.status(400).json({ error: 'No students provided' });
+    }
+    if (!assignmentId) {
+      return res.status(400).json({ error: 'Assignment ID is required' });
+    }
+
+    // Verify faculty owns this assignment
+    const assignmentIds = await getFacultyAssignmentIds(req.user.id);
+    if (!assignmentIds.includes(assignmentId)) {
+      return res.status(403).json({ error: 'Unauthorized assignment' });
+    }
+
+    const results = { created: 0, existing: 0, enrolled: 0, errors: [] };
+
+    for (const s of students) {
+      try {
+        const registerNo = String(s.registerNo || s.register_no || s['Register No'] || '').trim();
+        const name = String(s.name || s.Name || '').trim();
+        const email = String(s.email || s.Email || '').trim();
+        const phone = String(s.phone || s.Phone || '').trim();
+
+        if (!registerNo || !name || !email) {
+          results.errors.push(`Skipped: missing required fields for ${registerNo || name || 'unknown'}`);
+          continue;
+        }
+
+        // Find or create student user
+        let student = await prisma.user.findFirst({
+          where: { OR: [{ email }, { register_no: registerNo }] }
+        });
+
+        if (!student) {
+          const salt = await bcrypt.genSalt(10);
+          const hashedPassword = await bcrypt.hash(registerNo, salt);
+          student = await prisma.user.create({
+            data: {
+              name, email, register_no: registerNo, phone: phone || null,
+              password: hashedPassword, role: 'STUDENT', firstLogin: true, status: 'ACTIVE'
+            }
+          });
+          results.created++;
+        } else {
+          results.existing++;
+        }
+
+        // Enroll into assignment (skip if already enrolled)
+        const existingEnrollment = await prisma.assignmentStudent.findUnique({
+          where: { assignmentId_studentId: { assignmentId, studentId: student.id } }
+        });
+        if (!existingEnrollment) {
+          await prisma.assignmentStudent.create({
+            data: { assignmentId, studentId: student.id }
+          });
+          results.enrolled++;
+        }
+      } catch (err) {
+        results.errors.push(`Error processing ${s.registerNo || s.name || 'unknown'}: ${err.message}`);
+      }
+    }
+
+    res.json({
+      message: `Import complete. Created: ${results.created}, Already existed: ${results.existing}, Enrolled: ${results.enrolled}`,
+      ...results
+    });
+  } catch (error) {
+    console.error('importStudents error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.getStudentById = async (req, res) => {
+  try {
+    const student = await prisma.user.findUnique({
+      where: { id: req.params.id, role: 'STUDENT' },
+      select: { id: true, name: true, email: true, register_no: true, phone: true, status: true, firstLogin: true, createdAt: true }
+    });
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+    res.json(student);
+  } catch (error) {
+    console.error('getStudentById error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.createStudent = async (req, res) => {
+  try {
+    const { name, registerNo, email, phone, assignmentId } = req.body;
+    if (!name || !registerNo || !email) {
+      return res.status(400).json({ error: 'Name, register number, and email are required' });
+    }
+
+    // Check for existing user
+    const existing = await prisma.user.findFirst({
+      where: { OR: [{ email }, { register_no: registerNo }] }
+    });
+    if (existing) return res.status(400).json({ error: 'Student with this email or register number already exists' });
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(registerNo, salt);
+
+    const student = await prisma.user.create({
+      data: {
+        name, email, register_no: registerNo, phone: phone || null,
+        password: hashedPassword, role: 'STUDENT', firstLogin: true, status: 'ACTIVE'
+      }
+    });
+
+    // If assignmentId is provided, enroll student
+    if (assignmentId) {
+      await prisma.assignmentStudent.create({
+        data: { assignmentId, studentId: student.id }
+      });
+    }
+
+    res.status(201).json(student);
+  } catch (error) {
+    console.error('createStudent error:', error);
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.updateStudent = async (req, res) => {
+  try {
+    const { name, email, phone, status } = req.body;
+    const student = await prisma.user.update({
+      where: { id: req.params.id },
+      data: { name, email, phone, status }
+    });
+    res.json(student);
+  } catch (error) {
+    console.error('updateStudent error:', error);
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.resetStudentPassword = async (req, res) => {
+  try {
+    const student = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+
+    const newPassword = student.register_no || 'password123';
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    await prisma.user.update({
+      where: { id: req.params.id },
+      data: { password: hashedPassword, firstLogin: true }
+    });
+
+    res.json({ message: `Password reset to register number successfully` });
+  } catch (error) {
+    console.error('resetStudentPassword error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.updateStudentStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!['ACTIVE', 'INACTIVE', 'SUSPENDED'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status value' });
+    }
+    const student = await prisma.user.update({
+      where: { id: req.params.id },
+      data: { status }
+    });
+    res.json(student);
+  } catch (error) {
+    console.error('updateStudentStatus error:', error);
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.deleteStudent = async (req, res) => {
+  try {
+    const studentId = req.params.id;
+    // Remove from all assignments first
+    await prisma.assignmentStudent.deleteMany({ where: { studentId } });
+    // Remove exam students
+    await prisma.examStudent.deleteMany({ where: { studentId } });
+    // Delete the student
+    await prisma.user.delete({ where: { id: studentId } });
+    res.json({ message: 'Student deleted successfully' });
+  } catch (error) {
+    console.error('deleteStudent error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
 exports.getAssignmentStudents = async (req, res) => {
   try {
     const { id } = req.params;
@@ -1437,14 +1650,278 @@ exports.getAssignmentStudents = async (req, res) => {
 };
 
 // ============================================================================
-// OTHER MISSING PLACEHOLDERS
+// QUESTION CATEGORIES — Full CRUD
 // ============================================================================
-exports.getCategories = async (req, res) => res.status(501).json({ error: 'Not implemented' });
-exports.getCategory = async (req, res) => res.status(501).json({ error: 'Not implemented' });
-exports.createCategory = async (req, res) => res.status(501).json({ error: 'Not implemented' });
-exports.updateCategory = async (req, res) => res.status(501).json({ error: 'Not implemented' });
-exports.deleteCategory = async (req, res) => res.status(501).json({ error: 'Not implemented' });
-exports.getCategoryAnalytics = async (req, res) => res.status(501).json({ error: 'Not implemented' });
-exports.importQuestionsBulk = async (req, res) => res.status(501).json({ error: 'Not implemented' });
-exports.getPublishReadyExams = async (req, res) => res.status(501).json({ error: 'Not implemented' });
-exports.unpublishResults = async (req, res) => res.status(501).json({ error: 'Not implemented' });
+exports.getCategories = async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { departmentId: true } });
+    const categories = await prisma.questionCategory.findMany({
+      where: user?.departmentId ? { departmentId: user.departmentId } : {},
+      include: {
+        _count: { select: { questions: true } },
+        createdBy: { select: { name: true } }
+      },
+      orderBy: { name: 'asc' }
+    });
+    res.json(categories);
+  } catch (error) {
+    console.error('getCategories error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.getCategory = async (req, res) => {
+  try {
+    const category = await prisma.questionCategory.findUnique({
+      where: { id: req.params.id },
+      include: {
+        _count: { select: { questions: true } },
+        createdBy: { select: { name: true } }
+      }
+    });
+    if (!category) return res.status(404).json({ error: 'Category not found' });
+    res.json(category);
+  } catch (error) {
+    console.error('getCategory error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.createCategory = async (req, res) => {
+  try {
+    const { name, description, color } = req.body;
+    if (!name) return res.status(400).json({ error: 'Category name is required' });
+
+    const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { departmentId: true } });
+    if (!user?.departmentId) return res.status(400).json({ error: 'Faculty must be assigned to a department' });
+
+    const category = await prisma.questionCategory.create({
+      data: {
+        name,
+        description: description || null,
+        color: color || '#1976d2',
+        departmentId: user.departmentId,
+        createdById: req.user.id
+      }
+    });
+    res.status(201).json(category);
+  } catch (error) {
+    console.error('createCategory error:', error);
+    if (error.code === 'P2002') {
+      return res.status(400).json({ error: 'A category with this name already exists in your department' });
+    }
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.updateCategory = async (req, res) => {
+  try {
+    const { name, description, color } = req.body;
+    const category = await prisma.questionCategory.update({
+      where: { id: req.params.id },
+      data: { name, description, color }
+    });
+    res.json(category);
+  } catch (error) {
+    console.error('updateCategory error:', error);
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.deleteCategory = async (req, res) => {
+  try {
+    // Unlink questions from this category first (set categoryId to null)
+    await prisma.question.updateMany({
+      where: { categoryId: req.params.id },
+      data: { categoryId: null }
+    });
+    await prisma.questionCategory.delete({ where: { id: req.params.id } });
+    res.json({ message: 'Category deleted successfully' });
+  } catch (error) {
+    console.error('deleteCategory error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.getCategoryAnalytics = async (req, res) => {
+  try {
+    const category = await prisma.questionCategory.findUnique({
+      where: { id: req.params.id },
+      include: {
+        questions: {
+          select: { id: true, difficulty: true, marks: true, type: true }
+        }
+      }
+    });
+    if (!category) return res.status(404).json({ error: 'Category not found' });
+
+    const questions = category.questions;
+    const difficultyBreakdown = {
+      EASY: questions.filter(q => q.difficulty === 'EASY').length,
+      MEDIUM: questions.filter(q => q.difficulty === 'MEDIUM').length,
+      HARD: questions.filter(q => q.difficulty === 'HARD').length,
+    };
+    const typeBreakdown = {};
+    questions.forEach(q => { typeBreakdown[q.type] = (typeBreakdown[q.type] || 0) + 1; });
+    const totalMarks = questions.reduce((sum, q) => sum + q.marks, 0);
+
+    res.json({
+      categoryId: category.id,
+      categoryName: category.name,
+      totalQuestions: questions.length,
+      difficultyBreakdown,
+      typeBreakdown,
+      totalMarks,
+      averageMarks: questions.length > 0 ? (totalMarks / questions.length).toFixed(2) : 0
+    });
+  } catch (error) {
+    console.error('getCategoryAnalytics error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// ============================================================================
+// QUESTION BULK IMPORT
+// ============================================================================
+exports.importQuestionsBulk = async (req, res) => {
+  try {
+    const { questions, bankId, categoryId } = req.body;
+    if (!questions || !Array.isArray(questions) || questions.length === 0) {
+      return res.status(400).json({ error: 'No questions provided' });
+    }
+    if (!bankId) {
+      return res.status(400).json({ error: 'Question bank ID is required' });
+    }
+
+    // Verify bank exists and belongs to faculty's subjects
+    const bank = await prisma.questionBank.findUnique({
+      where: { id: bankId },
+      include: { subject: true }
+    });
+    if (!bank) return res.status(404).json({ error: 'Question bank not found' });
+
+    const results = { imported: 0, errors: [] };
+
+    for (let i = 0; i < questions.length; i++) {
+      try {
+        const q = questions[i];
+        const text = q.text || q.Question || q.question || '';
+        if (!text) {
+          results.errors.push(`Row ${i + 1}: Missing question text`);
+          continue;
+        }
+
+        const options = [];
+        const optionTexts = [
+          q.optionA || q['Option A'] || q.option_a || '',
+          q.optionB || q['Option B'] || q.option_b || '',
+          q.optionC || q['Option C'] || q.option_c || '',
+          q.optionD || q['Option D'] || q.option_d || '',
+        ];
+
+        const correctAnswer = String(q.correctAnswer || q['Correct Answer'] || q.correct_answer || 'A').toUpperCase().trim();
+        const correctIndex = ['A', 'B', 'C', 'D'].indexOf(correctAnswer);
+
+        for (let j = 0; j < optionTexts.length; j++) {
+          if (optionTexts[j]) {
+            options.push({
+              text: optionTexts[j],
+              isCorrect: j === correctIndex
+            });
+          }
+        }
+
+        if (options.length < 2) {
+          results.errors.push(`Row ${i + 1}: Need at least 2 options`);
+          continue;
+        }
+
+        const marks = parseFloat(q.marks || q.Marks || 1);
+        const diffRaw = String(q.difficulty || q.Difficulty || 'MEDIUM').toUpperCase().trim();
+        const difficulty = ['EASY', 'MEDIUM', 'HARD'].includes(diffRaw) ? diffRaw : 'MEDIUM';
+
+        await prisma.question.create({
+          data: {
+            bankId,
+            text,
+            type: 'MCQ',
+            marks: isNaN(marks) ? 1 : marks,
+            difficulty,
+            categoryId: categoryId || null,
+            options: { create: options }
+          }
+        });
+
+        results.imported++;
+      } catch (err) {
+        results.errors.push(`Row ${i + 1}: ${err.message}`);
+      }
+    }
+
+    res.json({
+      message: `Import complete. ${results.imported} questions imported.`,
+      ...results
+    });
+  } catch (error) {
+    console.error('importQuestionsBulk error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// ============================================================================
+// PUBLISH-READY EXAMS
+// ============================================================================
+exports.getPublishReadyExams = async (req, res) => {
+  try {
+    const assignmentIds = await getFacultyAssignmentIds(req.user.id);
+    const exams = await prisma.exam.findMany({
+      where: {
+        facultyAssignmentId: { in: assignmentIds },
+        status: { in: ['COMPLETED', 'EVALUATION'] }
+      },
+      include: {
+        facultyAssignment: {
+          include: { subject: true, assessmentType: true }
+        },
+        _count: { select: { sessions: true, results: true } }
+      },
+      orderBy: { updatedAt: 'desc' }
+    });
+    res.json(exams);
+  } catch (error) {
+    console.error('getPublishReadyExams error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// ============================================================================
+// UNPUBLISH RESULTS
+// ============================================================================
+exports.unpublishResults = async (req, res) => {
+  try {
+    const { examId } = req.params;
+    const assignmentIds = await getFacultyAssignmentIds(req.user.id);
+
+    const exam = await prisma.exam.findFirst({
+      where: { id: examId, facultyAssignmentId: { in: assignmentIds } }
+    });
+    if (!exam) return res.status(404).json({ error: 'Exam not found or unauthorized' });
+
+    // Unpublish all results
+    await prisma.result.updateMany({
+      where: { examId },
+      data: { published: false, publishedAt: null, status: 'EVALUATED' }
+    });
+
+    // Reset exam status
+    await prisma.exam.update({
+      where: { id: examId },
+      data: { status: 'COMPLETED' }
+    });
+
+    res.json({ message: 'Results unpublished successfully' });
+  } catch (error) {
+    console.error('unpublishResults error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
