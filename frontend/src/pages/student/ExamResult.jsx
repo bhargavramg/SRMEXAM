@@ -27,8 +27,8 @@ const ExamResult = () => {
   // Find the specific result
   const resultInfo = allResults?.find(r => r.examId === examId);
 
-  // If just submitted OR result not found OR result is provisional/unpublished
-  if (justSubmitted || !resultInfo || resultInfo.isProvisional) {
+  // If result not found OR result is provisional/unpublished
+  if (!resultInfo || resultInfo.isProvisional) {
     return (
       <Box sx={{ maxWidth: 600, mx: 'auto', mt: 8, px: 2 }}>
         <Card sx={{ borderRadius: 3, textAlign: 'center', py: 5, boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>

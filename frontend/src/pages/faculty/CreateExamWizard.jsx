@@ -149,6 +149,7 @@ const CreateExamWizard = () => {
         randomOptions: data.randomOptions ?? true,
         requireFullscreen: data.requireFullscreen ?? true,
         maxWarnings: data.maxWarnings ?? 3,
+        showResultMode: data.showResult || 'manual',
       }
     };
     console.log("Create Exam Payload (Draft):", payload);
@@ -172,6 +173,7 @@ const CreateExamWizard = () => {
         randomOptions: data.randomOptions,
         requireFullscreen: data.requireFullscreen,
         maxWarnings: data.maxWarnings,
+        showResultMode: data.showResult || 'manual',
       }
     };
     console.log("Create Exam Payload:", payload);

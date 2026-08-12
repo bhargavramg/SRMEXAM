@@ -56,7 +56,8 @@ export default function SubmissionEvaluator() {
     mutationFn: (evaluations) => facultyApi.saveEvaluationDraft(sessionId, evaluations),
     onSuccess: () => {
       setSnackbar({ open: true, message: 'Draft saved successfully!', severity: 'success' });
-      queryClient.invalidateQueries(['submissionDetail', sessionId]);
+      setLocalEvaluations({});
+      queryClient.invalidateQueries({ queryKey: ['submissionDetail', sessionId] });
     },
     onError: (err) => {
       setSnackbar({ open: true, message: err?.response?.data?.error || 'Failed to save draft', severity: 'error' });
@@ -67,7 +68,7 @@ export default function SubmissionEvaluator() {
     mutationFn: () => facultyApi.completeEvaluation(sessionId),
     onSuccess: (data) => {
       setSnackbar({ open: true, message: `Evaluation completed! Score: ${data.totalObtained}/${session?.totalMarks} (${data.grade})`, severity: 'success' });
-      queryClient.invalidateQueries(['submissionDetail', sessionId]);
+      queryClient.invalidateQueries({ queryKey: ['submissionDetail', sessionId] });
     },
     onError: (err) => {
       setSnackbar({ open: true, message: err?.response?.data?.error || 'Failed to complete evaluation', severity: 'error' });
@@ -76,8 +77,32 @@ export default function SubmissionEvaluator() {
 
   const singleEvalMutation = useMutation({
     mutationFn: ({ answerId, marksObtained, remarks }) => facultyApi.evaluateAnswer(answerId, { marksObtained, remarks }),
-    onSuccess: () => {
-      queryClient.invalidateQueries(['submissionDetail', sessionId]);
+    onSuccess: (updatedAnswer) => {
+      // 1. Clear local state for this answer so UI switches back to source of truth
+      setLocalEvaluations(prev => {
+        const next = { ...prev };
+        delete next[updatedAnswer.id];
+        return next;
+      });
+
+      // 2. Instantly update React Query cache with the new values
+      queryClient.setQueryData(['submissionDetail', sessionId], (oldData) => {
+        if (!oldData) return oldData;
+        const newAnswers = oldData.answers.map(ans => 
+          ans.id === updatedAnswer.id ? { 
+            ...ans, 
+            marksObtained: updatedAnswer.marksObtained,
+            evaluationRemarks: updatedAnswer.evaluationRemarks,
+            evaluationStatus: updatedAnswer.evaluationStatus,
+            isEvaluated: updatedAnswer.isEvaluated,
+            evaluatedAt: updatedAnswer.evaluatedAt
+          } : ans
+        );
+        return { ...oldData, answers: newAnswers };
+      });
+      
+      // 3. Background refetch for full sync
+      queryClient.invalidateQueries({ queryKey: ['submissionDetail', sessionId] });
     },
   });
 

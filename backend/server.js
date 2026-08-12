@@ -1,4 +1,4 @@
-const express = require('express');
+const express = require('express'); // Reload 1
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
@@ -111,4 +111,49 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
+});
+
+// ============================================================================
+// GRACEFUL SHUTDOWN
+// ============================================================================
+const gracefulShutdown = async (signal) => {
+  console.log(`\n[${signal}] Shutting down gracefully...`);
+  
+  server.close(async () => {
+    console.log('HTTP server closed.');
+    try {
+      const prisma = require('./src/utils/db');
+      await prisma.$disconnect();
+      console.log('Prisma connection pool disconnected.');
+      process.exit(0);
+    } catch (err) {
+      console.error('Error during Prisma disconnect:', err);
+      process.exit(1);
+    }
+  });
+
+  // Force shutdown after 10s
+  setTimeout(() => {
+    console.error('Forced shutdown due to timeout');
+    process.exit(1);
+  }, 10000);
+};
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+// For nodemon restarts (SIGUSR2)
+process.once('SIGUSR2', () => {
+  console.log('\n[SIGUSR2] Nodemon restart triggered. Cleaning up...');
+  server.close(async () => {
+    try {
+      const prisma = require('./src/utils/db');
+      await prisma.$disconnect();
+      console.log('Prisma disconnected for hot reload.');
+    } catch (err) {
+      console.error('Error during Prisma disconnect (SIGUSR2):', err);
+    } finally {
+      process.kill(process.pid, 'SIGUSR2');
+    }
+  });
 });

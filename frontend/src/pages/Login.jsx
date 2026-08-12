@@ -43,7 +43,11 @@ const Login = () => {
          navigate('/');
       }
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to log in. Please check your credentials.');
+      if (err.message === 'Network Error' || err.error === 'Network error. Please check your connection.') {
+        setError('Backend Server Unreachable. Please check your network connection or start the server.');
+      } else {
+        setError(err.error || err.message || 'An unexpected error occurred during login.');
+      }
     }
   };
 
@@ -124,7 +128,7 @@ const Login = () => {
           <form onSubmit={handleLogin}>
             <TextField
               fullWidth
-              label="Email" // Changed from Register Number to Email since auth logic usually expects email, based on authController
+              label="Email or Register Number"
               variant="outlined"
               margin="normal"
               required

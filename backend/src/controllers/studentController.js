@@ -282,7 +282,16 @@ exports.getExamHistory = async (req, res) => {
       },
       orderBy: { endTime: 'desc' }
     });
-    res.json(exams);
+    const mappedExams = exams.map(exam => ({
+      ...exam,
+      results: exam.results.map(r => ({
+        id: r.id,
+        examId: r.examId,
+        status: r.status,
+        isProvisional: true
+      }))
+    }));
+    res.json(mappedExams);
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -301,6 +310,7 @@ exports.getResults = async (req, res) => {
       include: {
         exam: {
           include: {
+            config: true,
             facultyAssignment: {
               include: {
                 subject: true,
@@ -328,7 +338,25 @@ exports.getResults = async (req, res) => {
         createdAt: r.createdAt,
       };
 
-      if (r.status === 'PUBLISHED') {
+      const config = r.exam.config;
+      const mode = config?.showResultMode || 'manual';
+      const endTime = r.exam.endTime;
+      
+      let isVisible = false;
+      if (mode === 'immediately') {
+         isVisible = (r.status === 'EVALUATED' || r.status === 'PUBLISHED' || r.status === 'AUTO_EVALUATED');
+      } else if (mode === 'after_end') {
+         const hasEnded = endTime && (new Date() >= new Date(endTime));
+         isVisible = hasEnded && (r.status === 'EVALUATED' || r.status === 'PUBLISHED' || r.status === 'AUTO_EVALUATED');
+      } else { // manual
+         isVisible = (r.status === 'PUBLISHED' || r.published === true);
+      }
+      
+      if (r.status === 'PUBLISHED' || r.published === true) {
+         isVisible = true;
+      }
+
+      if (isVisible) {
         return {
           ...base,
           totalMarks: r.totalMarks,
@@ -593,7 +621,10 @@ exports.submitExam = async (req, res) => {
       where: { id: sessionId },
       include: { 
         exam: {
-          include: { facultyAssignment: true }
+          include: { 
+            facultyAssignment: true,
+            config: true 
+          }
         },
         student: true
       }
@@ -788,8 +819,8 @@ exports.submitExam = async (req, res) => {
         isPass: gradeInfo.isPass,
         grade: gradeInfo.grade,
         status: pendingDescriptive > 0 ? 'PENDING_EVALUATION' : 'EVALUATED',
-        published: false,       // ← CRITICAL: Never publish immediately
-        publishedAt: null,      // ← Will be set when faculty publishes
+        published: (session.exam.config?.showResultMode === 'immediately' && pendingDescriptive === 0) ? true : false,
+        publishedAt: (session.exam.config?.showResultMode === 'immediately' && pendingDescriptive === 0) ? new Date() : null,
         totalQuestions,
         attemptedQuestions: attemptedCount,
         correctAnswers: correctCount,

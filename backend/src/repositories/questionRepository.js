@@ -1,5 +1,4 @@
-const { PrismaClient } = require('../../prisma/generated/client');
-const prisma = new PrismaClient();
+const prisma = require('../utils/db');
 
 class QuestionRepository {
   async create(data) {

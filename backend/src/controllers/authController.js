@@ -35,7 +35,13 @@ const login = async (req, res) => {
       refreshToken
     });
   } catch (error) {
-    res.status(401).json({ error: error.message });
+    const statusCode = error.statusCode || 500;
+    if (statusCode === 500) {
+      console.error('[AUTH DB ERROR]', error);
+      res.status(500).json({ error: 'Server is temporarily unavailable. Please try again.' });
+    } else {
+      res.status(statusCode).json({ error: error.message });
+    }
   }
 };
 

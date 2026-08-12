@@ -372,6 +372,7 @@ model ExamConfiguration {
   lateEntryAllowed  Boolean   @default(false)
   lateEntryMins     Int       @default(15)
   resultPublishTime DateTime?
+  showResultMode    String    @default("MANUAL")
 }
 
 model ExamQuestion {

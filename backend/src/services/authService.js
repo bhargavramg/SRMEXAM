@@ -16,21 +16,27 @@ const authenticateUser = async (identifier, password, ipAddress, userAgent) => {
 
   if (!user) {
     console.log(`[LOGIN DEBUG] User not found for identifier: ${identifier}`);
-    throw new Error('Invalid credentials: User not found.');
+    const err = new Error('Invalid credentials: User not found.');
+    err.statusCode = 401;
+    throw err;
   }
   
   console.log(`[LOGIN DEBUG] User found: ID=${user.id}, Role=${user.role}, Status=${user.status}`);
 
   if (user.status !== 'ACTIVE') {
     console.log(`[LOGIN DEBUG] User is not active. Status: ${user.status}`);
-    throw new Error(`Account is ${user.status}`);
+    const err = new Error(`Account is ${user.status}`);
+    err.statusCode = 403;
+    throw err;
   }
 
   const isPasswordValid = await bcrypt.compare(password, user.password);
   console.log(`[LOGIN DEBUG] bcrypt.compare result: ${isPasswordValid}`);
   
   if (!isPasswordValid) {
-    throw new Error('Invalid credentials: Password mismatch.');
+    const err = new Error('Invalid credentials: Password mismatch.');
+    err.statusCode = 401;
+    throw err;
   }
 
   console.log(`[LOGIN DEBUG] Generating JWTs for user ${user.id}`);
