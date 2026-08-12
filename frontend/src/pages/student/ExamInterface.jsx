@@ -74,7 +74,9 @@ const ExamInterface = () => {
        handleViolation("Not in Full Screen");
     }
 
-    socketRef.current = io('http://localhost:5000');
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+    const socketUrl = apiUrl.replace('/api', '');
+    socketRef.current = io(socketUrl);
     const socket = socketRef.current;
 
     socket.emit('join_exam', {
