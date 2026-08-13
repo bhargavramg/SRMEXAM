@@ -16,6 +16,7 @@ import PageHeader from '../../components/PageHeader';
 import { useQueryClient } from '@tanstack/react-query';
 import facultyApi from '../../api/facultyApi';
 import QuestionImportDialog from './QuestionImportDialog';
+import QuestionDialog from './components/QuestionDialog';
 import * as XLSX from 'xlsx';
 
 const difficultyColors = { EASY: 'success', MEDIUM: 'warning', HARD: 'error' };
@@ -36,6 +37,7 @@ const QuestionBank = () => {
   const [actionQuestion, setActionQuestion] = useState(null);
   
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
 
   const fetchQuestions = useCallback(async () => {
     setLoading(true);
@@ -244,7 +246,7 @@ const QuestionBank = () => {
             >
               Export
             </Button>
-            <Button variant="contained" startIcon={<Add />}>
+            <Button variant="contained" startIcon={<Add />} onClick={() => setAddDialogOpen(true)}>
               Add Question
             </Button>
           </Stack>
@@ -407,6 +409,12 @@ const QuestionBank = () => {
       <QuestionImportDialog
         open={importDialogOpen}
         onClose={() => setImportDialogOpen(false)}
+        onSuccess={() => fetchQuestions()}
+      />
+
+      <QuestionDialog
+        open={addDialogOpen}
+        onClose={() => setAddDialogOpen(false)}
         onSuccess={() => fetchQuestions()}
       />
     </Box>

@@ -687,7 +687,7 @@ exports.submitExam = async (req, res) => {
         questionVisited = true;
       }
 
-      const isDescriptive = ['SHORT_ANSWER', 'LONG_ANSWER', 'ESSAY'].includes(question.type);
+      const isDescriptive = ['SHORT_ANSWER', 'LONG_ANSWER', 'ESSAY', 'THEORY'].includes(question.type);
       const isObjective = isObjectiveType(question.type);
 
       // No answer provided at all

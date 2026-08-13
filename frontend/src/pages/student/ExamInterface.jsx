@@ -264,7 +264,7 @@ const ExamInterface = () => {
 
     questionsData.questions.forEach(q => {
       const isAnswered = !!answers[q.id];
-      const isDescriptive = ['SHORT_ANSWER', 'LONG_ANSWER', 'ESSAY'].includes(q.type);
+      const isDescriptive = ['SHORT_ANSWER', 'LONG_ANSWER', 'ESSAY', 'THEORY'].includes(q.type);
       const isVisited = !!reviewStatus[q.id] || !!timeSpent[q.id] || isAnswered;
       
       if (isVisited) {
@@ -488,7 +488,7 @@ const ExamInterface = () => {
 
             {/* Options or Text Input */}
             <FormControl component="fieldset" sx={{ mt: 2, width: '100%', flexGrow: 1 }}>
-              {['SHORT_ANSWER', 'LONG_ANSWER', 'ESSAY'].includes(currentQuestion?.type) ? (
+              {['SHORT_ANSWER', 'LONG_ANSWER', 'ESSAY', 'THEORY'].includes(currentQuestion?.type) ? (
                 <TextField
                   multiline
                   minRows={currentQuestion?.type === 'SHORT_ANSWER' ? 3 : 6}
