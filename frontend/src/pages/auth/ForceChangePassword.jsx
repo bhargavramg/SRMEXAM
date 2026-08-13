@@ -12,7 +12,7 @@ const ForceChangePassword = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { enqueueSnackbar } = useSnackbar();
 
   const handleSubmit = async (e) => {
@@ -43,20 +43,13 @@ const ForceChangePassword = () => {
         newPassword
       });
       
-      enqueueSnackbar('Password updated successfully', { variant: 'success' });
+      enqueueSnackbar('Password updated successfully. Please log in again.', { variant: 'success' });
       
-      // Update local storage to reflect firstLogin is false
-      if (user) {
-        const updatedUser = { ...user, firstLogin: false };
-        localStorage.setItem('user', JSON.stringify(updatedUser));
-      }
+      // Clear the current authentication/session state
+      logout();
       
-      // Reload page to force App.jsx guards to re-evaluate and redirect
-      let dashboardPath = '/student/dashboard';
-      if (user?.role === 'FACULTY') dashboardPath = '/faculty/dashboard';
-      if (user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') dashboardPath = '/admin/dashboard';
-      
-      navigate(dashboardPath);
+      // Redirect to the login page automatically
+      navigate('/login', { replace: true });
     } catch (err) {
       setError(err.error || err.message || 'Failed to change password. Check your current password.');
     } finally {
