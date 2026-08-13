@@ -563,6 +563,22 @@ exports.startExamSession = async (req, res) => {
   }
 };
 
+// ============================================================================
+// SEEDED RANDOM UTILITY
+// ============================================================================
+function getSeededRandom(seedStr) {
+  let h = 1779033703 ^ seedStr.length;
+  for (let i = 0; i < seedStr.length; i++) {
+    h = Math.imul(h ^ seedStr.charCodeAt(i), 3432918353);
+    h = h << 13 | h >>> 19;
+  }
+  return function() {
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    return ((h ^= h >>> 16) >>> 0) / 4294967296;
+  };
+}
+
 exports.getExamQuestions = async (req, res) => {
   try {
     const { sessionId } = req.params;
@@ -592,16 +608,27 @@ exports.getExamQuestions = async (req, res) => {
 
     let questionsList = examQuestions.map(eq => eq.question);
 
+    const random = getSeededRandom(sessionId);
+
     if (session.exam.config?.randomQuestions) {
-      questionsList.sort(() => Math.random() - 0.5);
+      questionsList.sort(() => random() - 0.5);
     }
     if (session.exam.config?.randomOptions) {
       questionsList.forEach(q => {
-        if (q.options) q.options.sort(() => Math.random() - 0.5);
+        if (q.options) q.options.sort(() => random() - 0.5);
       });
     }
 
-    res.json({ questions: questionsList });
+    const existingAnswers = await prisma.studentAnswer.findMany({
+      where: { sessionId },
+      select: {
+        questionId: true,
+        textAnswer: true,
+        selectedOptions: { select: { id: true } }
+      }
+    });
+
+    res.json({ questions: questionsList, existingAnswers });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -649,8 +676,40 @@ exports.submitExam = async (req, res) => {
       where: { examId: session.examId },
       include: {
         question: { include: { options: true } }
-      }
+      },
+      orderBy: { orderIndex: 'asc' }
     });
+
+    const random = getSeededRandom(session.id);
+    if (session.exam.config?.randomQuestions) {
+      examQuestions.sort(() => random() - 0.5);
+    }
+
+    let lastAnsweredIndex = -1;
+    for (let i = 0; i < examQuestions.length; i++) {
+      const q = examQuestions[i].question;
+      const rawAnswer = answers ? answers[q.id] : undefined;
+      let hasValidAnswer = false;
+
+      if (rawAnswer) {
+        if (typeof rawAnswer === 'object' && !Array.isArray(rawAnswer)) {
+          hasValidAnswer = !!(rawAnswer.selectedOptionId || rawAnswer.answer || (rawAnswer.textAnswer && rawAnswer.textAnswer.trim()));
+        } else if (typeof rawAnswer === 'string') {
+          hasValidAnswer = !!rawAnswer.trim();
+        }
+      }
+
+      if (hasValidAnswer) {
+        if (i > lastAnsweredIndex + 1) {
+          return res.status(400).json({ error: 'Sequential navigation violation. You skipped a question.' });
+        }
+        lastAnsweredIndex = i;
+      }
+    }
+
+    if (!forced && lastAnsweredIndex !== examQuestions.length - 1) {
+      return res.status(400).json({ error: 'You must answer all questions sequentially before submitting.' });
+    }
 
     let objectiveMarks = 0;
     let descriptiveMarks = 0;
@@ -911,9 +970,41 @@ exports.autoSaveExam = async (req, res) => {
 
     const { answers } = parsed.data;
 
-    const session = await prisma.examSession.findUnique({ where: { id: sessionId } });
+    const session = await prisma.examSession.findUnique({ where: { id: sessionId }, include: { exam: { include: { config: true } } } });
     if (!session || session.studentId !== studentId || session.status !== 'IN_PROGRESS') {
       return res.status(403).json({ error: 'Invalid or inactive session' });
+    }
+
+    const examQuestions = await prisma.examQuestion.findMany({
+      where: { examId: session.examId },
+      orderBy: { orderIndex: 'asc' }
+    });
+    
+    const random = getSeededRandom(session.id);
+    if (session.exam.config?.randomQuestions) {
+      examQuestions.sort(() => random() - 0.5);
+    }
+
+    let lastAnsweredIndex = -1;
+    for (let i = 0; i < examQuestions.length; i++) {
+      const qId = examQuestions[i].questionId;
+      const rawAnswer = answers ? answers[qId] : undefined;
+      let hasValidAnswer = false;
+
+      if (rawAnswer) {
+        if (typeof rawAnswer === 'object' && !Array.isArray(rawAnswer)) {
+          hasValidAnswer = !!(rawAnswer.selectedOptionId || rawAnswer.answer || (rawAnswer.textAnswer && rawAnswer.textAnswer.trim()));
+        } else if (typeof rawAnswer === 'string') {
+          hasValidAnswer = !!rawAnswer.trim();
+        }
+      }
+
+      if (hasValidAnswer) {
+        if (i > lastAnsweredIndex + 1) {
+          return res.status(400).json({ error: 'Sequential navigation violation. You skipped a question.' });
+        }
+        lastAnsweredIndex = i;
+      }
     }
 
     await prisma.studentAnswer.deleteMany({ where: { sessionId } });
