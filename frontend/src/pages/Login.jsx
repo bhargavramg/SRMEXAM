@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Typography, TextField, Button, Checkbox, FormControlLabel, Paper, IconButton, InputAdornment, Tooltip } from '@mui/material';
+import { Box, Typography, TextField, Button, Checkbox, FormControlLabel, Paper, IconButton, InputAdornment, Tooltip, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { BookOpen, ArrowRight, GraduationCap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -13,6 +13,7 @@ const Login = () => {
   const [error, setError] = React.useState('');
   const [rememberMe, setRememberMe] = React.useState(true);
   const [showPassword, setShowPassword] = React.useState(false);
+  const [forgotPasswordOpen, setForgotPasswordOpen] = React.useState(false);
 
   React.useEffect(() => {
     const savedEmail = localStorage.getItem('rememberedEmail');
@@ -182,7 +183,7 @@ const Login = () => {
                 } 
                 label="Remember Me" 
               />
-              <Typography variant="body2" color="primary" sx={{ cursor: 'pointer', fontWeight: 500, '&:hover': { textDecoration: 'underline' } }}>
+              <Typography variant="body2" color="primary" onClick={() => setForgotPasswordOpen(true)} sx={{ cursor: 'pointer', fontWeight: 500, '&:hover': { textDecoration: 'underline' } }}>
                 Forgot Password?
               </Typography>
             </Box>
@@ -201,6 +202,26 @@ const Login = () => {
           </form>
         </Paper>
       </Box>
+      <Dialog
+        open={forgotPasswordOpen}
+        onClose={() => setForgotPasswordOpen(false)}
+        aria-labelledby="forgot-password-dialog-title"
+        aria-describedby="forgot-password-dialog-description"
+      >
+        <DialogTitle id="forgot-password-dialog-title">
+          Forgot Password?
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText id="forgot-password-dialog-description">
+            Please contact your Faculty Member or Examination Administrator to reset your password.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setForgotPasswordOpen(false)} color="primary" autoFocus>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
