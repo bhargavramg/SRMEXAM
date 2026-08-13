@@ -489,7 +489,7 @@ exports.getLiveMonitoringData = async (req, res) => {
       include: {
         student: {
           select: {
-            id: true, name: true, register_no: true, departmentId: true,
+            id: true, name: true, register_no: true, email: true, departmentId: true,
             department: { select: { code: true } },
             enrollments: {
               where: { status: 'ACTIVE' },
@@ -501,7 +501,27 @@ exports.getLiveMonitoringData = async (req, res) => {
       }
     });
 
-    res.json({ exam, sessions });
+    const examStudents = await prisma.examStudent.findMany({
+      where: { examId },
+      include: {
+        student: { select: { id: true, name: true, register_no: true, email: true } }
+      }
+    });
+
+    let assignedStudents = [];
+    if (examStudents.length > 0) {
+      assignedStudents = examStudents.map(es => es.student);
+    } else {
+      const assignmentStudents = await prisma.assignmentStudent.findMany({
+        where: { assignmentId: exam.facultyAssignmentId },
+        include: {
+          student: { select: { id: true, name: true, register_no: true, email: true } }
+        }
+      });
+      assignedStudents = assignmentStudents.map(as => as.student);
+    }
+
+    res.json({ exam, sessions, assignedStudents });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
   }
