@@ -493,11 +493,7 @@ exports.getLiveMonitoringData = async (req, res) => {
         student: {
           select: {
             id: true, name: true, register_no: true, email: true, departmentId: true,
-            department: { select: { code: true } },
-            enrollments: {
-              where: { status: 'ACTIVE' },
-              include: { course: true, semester: true,  }
-            }
+            department: { select: { code: true } }
           }
         },
         _count: { select: { warnings: true, studentAnswers: true } }
@@ -516,7 +512,7 @@ exports.getLiveMonitoringData = async (req, res) => {
       assignedStudents = examStudents.map(es => es.student);
     } else {
       const assignmentStudents = await prisma.assignmentStudent.findMany({
-        where: { assignmentId: exam.facultyAssignmentId },
+        where: { assignmentId: exam.facultyAssignmentId, status: 'ACTIVE' },
         include: {
           student: { select: { id: true, name: true, register_no: true, email: true } }
         }
