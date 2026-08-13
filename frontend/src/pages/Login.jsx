@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Typography, TextField, Button, Checkbox, FormControlLabel, Paper, IconButton, InputAdornment, Tooltip, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
+import { Box, Typography, TextField, Button, Checkbox, FormControlLabel, Paper, IconButton, InputAdornment, Tooltip, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, CircularProgress } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { BookOpen, ArrowRight, GraduationCap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -14,6 +14,7 @@ const Login = () => {
   const [rememberMe, setRememberMe] = React.useState(true);
   const [showPassword, setShowPassword] = React.useState(false);
   const [forgotPasswordOpen, setForgotPasswordOpen] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
 
   React.useEffect(() => {
     const savedEmail = localStorage.getItem('rememberedEmail');
@@ -25,7 +26,9 @@ const Login = () => {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (loading) return;
     setError('');
+    setLoading(true);
     try {
       if (rememberMe) {
         localStorage.setItem('rememberedEmail', email);
@@ -49,6 +52,7 @@ const Login = () => {
       } else {
         setError(err.error || err.message || 'An unexpected error occurred during login.');
       }
+      setLoading(false);
     }
   };
 
@@ -133,6 +137,7 @@ const Login = () => {
               variant="outlined"
               margin="normal"
               required
+              disabled={loading}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               sx={{ mb: 3 }}
@@ -149,6 +154,7 @@ const Login = () => {
               variant="outlined"
               margin="normal"
               required
+              disabled={loading}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               sx={{ mb: 2 }}
@@ -162,6 +168,7 @@ const Login = () => {
                           onClick={() => setShowPassword(!showPassword)}
                           onMouseDown={(e) => e.preventDefault()}
                           edge="end"
+                          disabled={loading}
                         >
                           {showPassword ? <VisibilityOff /> : <Visibility />}
                         </IconButton>
@@ -178,6 +185,7 @@ const Login = () => {
                   <Checkbox 
                     checked={rememberMe} 
                     onChange={(e) => setRememberMe(e.target.checked)} 
+                    disabled={loading}
                     color="primary" 
                   />
                 } 
@@ -194,10 +202,12 @@ const Login = () => {
               color="primary" 
               fullWidth 
               size="large"
-              endIcon={<ArrowRight size={20} />}
+              disabled={loading}
+              startIcon={loading ? <CircularProgress size={20} color="inherit" /> : undefined}
+              endIcon={!loading ? <ArrowRight size={20} /> : undefined}
               sx={{ py: 1.5, fontSize: '1rem' }}
             >
-              Login
+              {loading ? 'Logging in...' : 'Login'}
             </Button>
           </form>
         </Paper>
