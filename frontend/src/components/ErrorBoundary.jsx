@@ -5,19 +5,44 @@ import { Refresh } from '@mui/icons-material';
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null, errorInfo: null };
+    this.state = { hasError: false, error: null, errorInfo: null, reloading: false };
   }
 
   static getDerivedStateFromError(error) {
-    return { hasError: true };
+    const isChunkLoadError = error?.name === 'ChunkLoadError' || 
+      (error?.message && (error.message.includes('Failed to fetch dynamically imported module') || error.message.includes('Loading chunk')));
+      
+    if (isChunkLoadError) {
+      const lastReload = sessionStorage.getItem('chunk_failed_reload_time');
+      const now = Date.now();
+      if (!lastReload || now - parseInt(lastReload, 10) > 10000) {
+        sessionStorage.setItem('chunk_failed_reload_time', now.toString());
+        window.location.reload();
+        return { hasError: true, error, reloading: true };
+      }
+    }
+    
+    return { hasError: true, error };
   }
 
   componentDidCatch(error, errorInfo) {
     console.error("ErrorBoundary caught an error:", error, errorInfo);
-    this.setState({ error, errorInfo });
+    if (!this.state.reloading) {
+      this.setState({ errorInfo });
+    }
   }
 
   render() {
+    if (this.state.reloading) {
+      return (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', bgcolor: 'background.default' }}>
+          <Typography variant="h6" color="text.secondary">
+            Applying update, please wait...
+          </Typography>
+        </Box>
+      );
+    }
+    
     if (this.state.hasError) {
       return (
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', p: 3, bgcolor: 'background.default' }}>
