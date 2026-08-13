@@ -204,9 +204,9 @@ exports.createExam = async (req, res) => {
       data: {
         title,
         facultyAssignmentId,
-        durationMins,
-        passingMarks,
-        totalMarks,
+        durationMins: parseInt(durationMins, 10),
+        passingMarks: parseFloat(passingMarks),
+        totalMarks: parseFloat(totalMarks),
         instructions,
         status: 'DRAFT',
         startTime: startTime ? new Date(startTime) : null,
@@ -246,6 +246,9 @@ exports.updateExam = async (req, res) => {
     const { config, questionIds, startTime, endTime, ...examData } = req.body;
     if (startTime) examData.startTime = new Date(startTime);
     if (endTime) examData.endTime = new Date(endTime);
+    if (examData.durationMins !== undefined) examData.durationMins = parseInt(examData.durationMins, 10);
+    if (examData.passingMarks !== undefined) examData.passingMarks = parseFloat(examData.passingMarks);
+    if (examData.totalMarks !== undefined) examData.totalMarks = parseFloat(examData.totalMarks);
 
     const updated = await prisma.exam.update({
       where: { id: req.params.id },
