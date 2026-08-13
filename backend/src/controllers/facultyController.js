@@ -786,7 +786,7 @@ exports.getSubmissionDetail = async (req, res) => {
           isCorrect: o.isCorrect,
         })),
         selectedOptionIds: a.selectedOptions.map(o => o.id),
-        textResponse: a.textResponse,
+        textAnswer: a.textAnswer,
         fileUrl: a.fileUrl,
         marksObtained: a.marksObtained,
         isCorrect: a.isCorrect,
