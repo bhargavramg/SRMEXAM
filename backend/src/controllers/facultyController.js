@@ -1,5 +1,5 @@
 const prisma = require('../utils/db');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 
 // ============================================================================
 // GRADE CALCULATION HELPER
@@ -1423,7 +1423,7 @@ exports.getStudents = async (req, res) => {
 // ============================================================================
 // FACULTY STUDENT MANAGEMENT — Full CRUD
 // ============================================================================
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 
 exports.exportStudents = async (req, res) => {
   try {

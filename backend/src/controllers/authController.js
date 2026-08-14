@@ -91,7 +91,7 @@ const changePassword = async (req, res) => {
     }
 
     const prisma = require('../utils/db');
-    const bcrypt = require('bcrypt');
+    const bcrypt = require('bcryptjs');
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) return res.status(404).json({ error: 'User not found' });

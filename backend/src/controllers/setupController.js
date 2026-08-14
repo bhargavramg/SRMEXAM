@@ -1,5 +1,5 @@
 const prisma = require('../utils/db');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 
 // ============================================================================
 // GET SETUP STATUS (Unauthenticated — checked before login)
