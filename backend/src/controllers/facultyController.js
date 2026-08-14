@@ -1423,7 +1423,6 @@ exports.getStudents = async (req, res) => {
 // ============================================================================
 // FACULTY STUDENT MANAGEMENT — Full CRUD
 // ============================================================================
-const bcrypt = require('bcryptjs');
 
 exports.exportStudents = async (req, res) => {
   try {
