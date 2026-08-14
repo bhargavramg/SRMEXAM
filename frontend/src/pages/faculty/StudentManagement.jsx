@@ -142,8 +142,9 @@ const StudentManagement = () => {
         await facultyApi.updateStudent(selectedStudent.id, formData);
         enqueueSnackbar('Student updated successfully', { variant: 'success' });
       } else {
-        await facultyApi.createStudent(formData);
-        enqueueSnackbar('Student created successfully', { variant: 'success' });
+        const result = await facultyApi.createStudent(formData);
+        const msg = result?.message || 'Student added successfully';
+        enqueueSnackbar(msg, { variant: 'success' });
       }
       handleCloseDialog('addEdit');
       fetchData();
@@ -165,7 +166,7 @@ const StudentManagement = () => {
   const handleImport = async (data) => {
     try {
       const res = await facultyApi.importStudents(data);
-      setImportSummary(res.data);
+      setImportSummary(res); // axiosClient already unwraps response.data
       handleCloseDialog('import');
       fetchData();
     } catch (err) {
@@ -450,31 +451,33 @@ const StudentManagement = () => {
               <Grid container spacing={2} sx={{ mb: 3 }}>
                 <Grid item xs={4}>
                   <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'success.light', color: 'success.contrastText' }}>
-                    <Typography variant="h4">{importSummary.results?.successful?.length || 0}</Typography>
-                    <Typography variant="body2">Imported</Typography>
+                    <Typography variant="h4">{importSummary.created || 0}</Typography>
+                    <Typography variant="body2">New Students</Typography>
                   </Paper>
                 </Grid>
                 <Grid item xs={4}>
-                  <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'warning.light', color: 'warning.contrastText' }}>
-                    <Typography variant="h4">{importSummary.results?.duplicates?.length || 0}</Typography>
-                    <Typography variant="body2">Skipped (Dupes)</Typography>
+                  <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'info.light', color: 'info.contrastText' }}>
+                    <Typography variant="h4">{importSummary.existing || 0}</Typography>
+                    <Typography variant="body2">Re-Assigned</Typography>
                   </Paper>
                 </Grid>
                 <Grid item xs={4}>
                   <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'error.light', color: 'error.contrastText' }}>
-                    <Typography variant="h4">{importSummary.results?.invalid?.length || 0}</Typography>
-                    <Typography variant="body2">Failed</Typography>
+                    <Typography variant="h4">{importSummary.errors?.length || 0}</Typography>
+                    <Typography variant="body2">Errors</Typography>
                   </Paper>
                 </Grid>
               </Grid>
-              
-              <Typography variant="subtitle1" gutterBottom>Students have been assigned to:</Typography>
-              <Box sx={{ p: 2, bgcolor: 'background.default', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
-                <Typography variant="body1"><strong>Subject:</strong> {importSummary.assignedTo?.subject}</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Section: {importSummary.assignedTo?.section} | Department: {importSummary.assignedTo?.department}
-                </Typography>
-              </Box>
+              {importSummary.errors?.length > 0 && (
+                <Box sx={{ mt: 2, p: 1.5, bgcolor: '#ffebee', borderRadius: 1 }}>
+                  {importSummary.errors.map((e, i) => (
+                    <Typography key={i} variant="caption" display="block" color="error">{e}</Typography>
+                  ))}
+                </Box>
+              )}
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                {importSummary.message}
+              </Typography>
             </Box>
           )}
         </DialogContent>

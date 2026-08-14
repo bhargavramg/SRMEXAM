@@ -1546,30 +1546,54 @@ exports.createStudent = async (req, res) => {
       return res.status(400).json({ error: 'Name, register number, and email are required' });
     }
 
-    // Check for existing user
-    const existing = await prisma.user.findFirst({
+    // Step 1: Find existing global student by register number OR email
+    let student = await prisma.user.findFirst({
       where: { OR: [{ email }, { register_no: registerNo }] }
     });
-    if (existing) return res.status(400).json({ error: 'Student with this email or register number already exists' });
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(registerNo, salt);
+    let wasExisting = false;
 
-    const student = await prisma.user.create({
-      data: {
-        name, email, register_no: registerNo, phone: phone || null,
-        password: hashedPassword, role: 'STUDENT', firstLogin: true, status: 'ACTIVE'
-      }
-    });
+    if (student) {
+      // Student already exists globally — reuse them (do NOT reject)
+      wasExisting = true;
+    } else {
+      // Step 2: Student doesn't exist — create a new global account
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(registerNo, salt);
+      student = await prisma.user.create({
+        data: {
+          name, email, register_no: registerNo, phone: phone || null,
+          password: hashedPassword, role: 'STUDENT', firstLogin: true, status: 'ACTIVE'
+        }
+      });
+    }
 
-    // If assignmentId is provided, enroll student
+    // Step 3: Handle assignment enrollment
     if (assignmentId) {
+      // Check if already enrolled in THIS specific assignment
+      const existingEnrollment = await prisma.assignmentStudent.findUnique({
+        where: { assignmentId_studentId: { assignmentId, studentId: student.id } }
+      });
+
+      if (existingEnrollment) {
+        // Already assigned to this exact subject/faculty — block duplicate
+        return res.status(409).json({
+          error: 'Student is already assigned to this subject.',
+          studentId: student.id
+        });
+      }
+
+      // Enroll into the new assignment
       await prisma.assignmentStudent.create({
         data: { assignmentId, studentId: student.id }
       });
     }
 
-    res.status(201).json(student);
+    const message = wasExisting
+      ? 'Student already exists globally and has been assigned to this subject.'
+      : 'Student created and assigned successfully.';
+
+    res.status(201).json({ ...student, message, wasExisting });
   } catch (error) {
     console.error('createStudent error:', error);
     res.status(400).json({ error: error.message });
