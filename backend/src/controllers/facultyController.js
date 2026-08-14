@@ -1,4 +1,5 @@
 const prisma = require('../utils/db');
+const bcrypt = require('bcrypt');
 
 // ============================================================================
 // GRADE CALCULATION HELPER
