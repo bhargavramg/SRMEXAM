@@ -148,7 +148,7 @@ const StudentManagement = () => {
       handleCloseDialog('addEdit');
       fetchData();
     } catch (err) {
-      enqueueSnackbar(err.response?.data?.error || 'Failed to save student', { variant: 'error' });
+      enqueueSnackbar(err.error || err.message || 'Failed to save student', { variant: 'error' });
     }
   };
 
@@ -158,7 +158,7 @@ const StudentManagement = () => {
       enqueueSnackbar('Password reset successfully', { variant: 'success' });
       handleCloseDialog('resetPassword');
     } catch (err) {
-      enqueueSnackbar(err.response?.data?.error || 'Failed to reset password', { variant: 'error' });
+      enqueueSnackbar(err.error || err.message || 'Failed to reset password', { variant: 'error' });
     }
   };
 
@@ -169,7 +169,7 @@ const StudentManagement = () => {
       handleCloseDialog('import');
       fetchData();
     } catch (err) {
-      enqueueSnackbar(err.response?.data?.error || 'Failed to import students', { variant: 'error' });
+      enqueueSnackbar(err.error || err.message || 'Failed to import students', { variant: 'error' });
     }
   };
 
@@ -180,7 +180,7 @@ const StudentManagement = () => {
       enqueueSnackbar(`Student marked as ${newStatus}`, { variant: 'success' });
       fetchData();
     } catch (err) {
-      enqueueSnackbar(err.response?.data?.error || 'Failed to update status', { variant: 'error' });
+      enqueueSnackbar(err.error || err.message || 'Failed to update status', { variant: 'error' });
     }
   };
 
@@ -191,7 +191,7 @@ const StudentManagement = () => {
       handleCloseDialog('delete');
       fetchData();
     } catch (err) {
-      enqueueSnackbar(err.response?.data?.error || 'Failed to delete student', { variant: 'error' });
+      enqueueSnackbar(err.error || err.message || 'Failed to delete student', { variant: 'error' });
       handleCloseDialog('delete'); // close on error so they see message
     }
   };
