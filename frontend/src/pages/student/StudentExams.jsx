@@ -62,9 +62,9 @@ export default function StudentExams() {
                       <Button 
                         variant="contained" 
                         fullWidth
-                        onClick={() => navigate(`/student/exam/${exam.id}/lobby`)}
+                        onClick={() => navigate(`/student/exam/${exam.id}/instructions`)}
                       >
-                        Enter Exam Lobby
+                        Enter Exam
                       </Button>
                     </Box>
                   </CardContent>

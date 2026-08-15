@@ -76,9 +76,9 @@ const StudentDashboard = () => {
                 variant="contained" 
                 size="large" 
                 sx={{ px: 4 }}
-                onClick={() => navigate(`/student/exam/${exam.id}/lobby`)}
+                onClick={() => navigate(`/student/exam/${exam.id}/instructions`)}
               >
-                Enter Lobby
+                Enter Exam
               </Button>
             </CardContent>
           </Card>

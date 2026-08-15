@@ -32,6 +32,7 @@ const AuditLogs = lazy(() => import('./pages/admin/AuditLogs'))
 const SystemSettings = lazy(() => import('./pages/admin/SystemSettings'))
 // Student Pages
 const StudentDashboard = lazy(() => import('./pages/student/Dashboard'))
+const ExamInstructions = lazy(() => import('./pages/student/ExamInstructions'))
 const ExamLobby = lazy(() => import('./pages/student/ExamLobby'))
 const ExamInterface = lazy(() => import('./pages/student/ExamInterface'))
 const ExamResult = lazy(() => import('./pages/student/ExamResult'))
@@ -200,6 +201,7 @@ function App() {
                     <Route path="exams" element={<StudentExams />} />
                     <Route path="results" element={<StudentResultsList />} />
                     <Route path="settings" element={<StudentSettings />} />
+                    <Route path="exam/:examId/instructions" element={<ExamInstructions />} />
                     <Route path="exam/:examId/lobby" element={<ExamLobby />} />
                     <Route path="exam/:examId/result" element={<ExamResult />} />
                   </Route>
