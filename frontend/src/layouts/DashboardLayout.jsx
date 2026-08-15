@@ -44,8 +44,21 @@ const DashboardLayout = () => {
           [`& .MuiDrawer-paper`]: { width: drawerWidth, boxSizing: 'border-box', borderRight: '1px solid #E3F2FD' },
         }}
       >
-        <Toolbar /> {/* Spacer */}
-        <Box sx={{ overflow: 'auto', mt: 3, px: 2 }}>
+        <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, minHeight: 64 }}>
+          <Box
+            component="img"
+            src="/srm-logo.jpg"
+            alt="SRM Institute of Science and Technology"
+            sx={{
+              width: '100%',
+              maxWidth: 200,
+              height: 'auto',
+              objectFit: 'contain',
+              display: 'block',
+            }}
+          />
+        </Box>
+        <Box sx={{ overflow: 'auto', mt: 1, px: 2 }}>
           <List>
             {menuItems.map((item) => {
               const isActive = pathname.startsWith(item.path);
