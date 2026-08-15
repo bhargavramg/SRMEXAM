@@ -1,10 +1,9 @@
 import React from 'react';
 import { 
   Drawer, Box, List, ListItem, ListItemButton, 
-  ListItemIcon, ListItemText, Typography, Divider, Chip
+  ListItemIcon, ListItemText, Divider, Chip
 } from '@mui/material';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { BookOpen } from 'lucide-react';
 
 const DRAWER_WIDTH = 280;
 
@@ -14,19 +13,20 @@ const Sidebar = ({ menuItems, mobileOpen, onClose, isMobile, role }) => {
 
   const drawerContent = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ p: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <Box sx={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          width: 40, height: 40, bgcolor: 'primary.main', borderRadius: 2, color: 'white'
-        }}>
-          <BookOpen size={24} />
-        </Box>
-        <Box>
-          <Typography variant="h6" color="primary" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-            ExamPortal
-          </Typography>
-          <Chip label={role} size="small" color="primary" variant="outlined" sx={{ height: 20, fontSize: '0.65rem', mt: 0.5, fontWeight: 600 }} />
-        </Box>
+      <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+        <Box
+          component="img"
+          src="/srm-logo.jpg"
+          alt="SRM Institute of Science and Technology"
+          sx={{
+            width: '100%',
+            maxWidth: 220,
+            height: 'auto',
+            objectFit: 'contain',
+            display: 'block',
+          }}
+        />
+        <Chip label={role} size="small" color="primary" variant="outlined" sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600 }} />
       </Box>
 
       <Divider sx={{ mb: 2 }} />
