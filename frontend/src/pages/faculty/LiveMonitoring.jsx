@@ -64,12 +64,24 @@ const LiveMonitoring = () => {
       });
     });
 
-    socket.on('student_warning', (warningData) => {
-      setLiveSessions(prev => prev.map(s => s.studentId === warningData.studentId ? { 
-         ...s, 
-         _count: { ...s._count, warnings: (s._count?.warnings || 0) + 1 },
-         lastActivity: new Date().toISOString()
-      } : s));
+    // student_warning_alert is now broadcast by the backend HTTP logActivity handler
+    // with the CONFIRMED database warningCount — use this authoritative value, do NOT
+    // blindly increment the local counter.
+    socket.on('student_warning_alert', (warningData) => {
+      setLiveSessions(prev => prev.map(s => {
+        if (s.studentId !== warningData.studentId) return s;
+
+        // Use the backend-confirmed count if provided; otherwise fall back to increment
+        const confirmedCount = (typeof warningData.warningCount === 'number')
+          ? warningData.warningCount
+          : (s._count?.warnings || 0) + 1;
+
+        return {
+          ...s,
+          _count: { ...s._count, warnings: confirmedCount },
+          lastActivity: new Date().toISOString()
+        };
+      }));
     });
 
     return () => socket.disconnect();
@@ -77,7 +89,8 @@ const LiveMonitoring = () => {
 
   if (isLoading) return <Box sx={{ p: 4, textAlign: 'center' }}><CircularProgress /></Box>;
 
-  // Calculate statistics
+  // Calculate statistics — these are UNCHANGED exam-status counters
+  // Violations are additional security information and do not affect these counts
   const totalAssigned = assignedStudents.length;
   const totalStarted = liveSessions.length;
   const totalWriting = liveSessions.filter(s => s.status === 'IN_PROGRESS' || !s.status).length;
@@ -101,6 +114,16 @@ const LiveMonitoring = () => {
     }
   };
 
+  const getViolationChip = (count) => {
+    if (!count || count === 0) {
+      return <Chip label="0" size="small" sx={{ bgcolor: theme.palette.grey[100], color: theme.palette.text.secondary, fontWeight: 'bold', minWidth: 40 }} />;
+    }
+    if (count <= 2) {
+      return <Chip label={count} size="small" sx={{ bgcolor: '#FFF3E0', color: '#E65100', fontWeight: 'bold', minWidth: 40 }} />;
+    }
+    return <Chip label={count} size="small" sx={{ bgcolor: '#FFEBEE', color: '#C62828', fontWeight: 'bold', minWidth: 40 }} />;
+  };
+
   return (
     <Box>
       <PageHeader 
@@ -109,7 +132,7 @@ const LiveMonitoring = () => {
         breadcrumbs={[{ label: 'Faculty' }, { label: 'Exams', path: '/faculty/exams' }, { label: 'Live' }]}
       />
       
-      {/* Top Summary Cards */}
+      {/* Top Summary Cards — UNCHANGED, violations do NOT affect these counts */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
           <Card sx={{ bgcolor: 'primary.main', color: 'primary.contrastText', boxShadow: 3 }}>
@@ -158,6 +181,8 @@ const LiveMonitoring = () => {
                   <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Status</TableCell>
                   <TableCell sx={{ fontWeight: 'bold' }}>Exam Start Time</TableCell>
                   <TableCell sx={{ fontWeight: 'bold' }}>Last Activity</TableCell>
+                  {/* Violations column — additional security info, separate from exam-status counts */}
+                  <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Violations</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -169,6 +194,9 @@ const LiveMonitoring = () => {
                     else displayStatus = 'COMPLETED';
                   }
 
+                  // Violation count from DB (via initial fetch or live socket update)
+                  const violationCount = session?._count?.warnings ?? 0;
+
                   return (
                     <TableRow key={student.id} hover>
                       <TableCell>{student.name}</TableCell>
@@ -177,12 +205,13 @@ const LiveMonitoring = () => {
                       <TableCell align="center">{getStatusChip(displayStatus)}</TableCell>
                       <TableCell>{formatTime(session?.startTime)}</TableCell>
                       <TableCell>{formatTime(session?.lastActivity || session?.telemetry?.timestamp)}</TableCell>
+                      <TableCell align="center">{getViolationChip(violationCount)}</TableCell>
                     </TableRow>
                   );
                 })}
                 {assignedStudents.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
+                    <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
                       <Typography variant="body1" color="text.secondary">
                         No students are assigned to this exam.
                       </Typography>

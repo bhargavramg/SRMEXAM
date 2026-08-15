@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Box, Typography, Button, Card, CardContent, CircularProgress, Radio, RadioGroup, FormControlLabel, FormControl, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Grid, Paper, Divider, TextField } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -8,7 +8,12 @@ import SubmitExamModal from './components/SubmitExamModal';
 import ExamSuccessScreen from './components/ExamSuccessScreen';
 import { useAuth } from '../../contexts/AuthContext';
 import { io } from 'socket.io-client';
-import { Lock, ChevronRight, CheckCircle, Clock } from 'lucide-react';
+import { Lock, ChevronRight, CheckCircle, Clock, ShieldAlert } from 'lucide-react';
+
+// ============================================================================
+// DEDUPLICATION WINDOW — ms within which a second focus-loss event is ignored
+// ============================================================================
+const DEDUP_WINDOW_MS = 800;
 
 const ExamInterface = () => {
   const { examId, sessionId } = useParams();
@@ -31,6 +36,14 @@ const ExamInterface = () => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [reviewStatus, setReviewStatus] = useState({}); // { [questionId]: 'marked' | 'visited' }
   const [timeSpent, setTimeSpent] = useState({}); // { [questionId]: seconds }
+
+  // ============================================================================
+  // FOCUS-LOSS SECURITY STATE
+  // showFocusOverlay: controls the double-layer protection overlay
+  // focusLostTimestampRef: tracks when the last focus-loss event fired (deduplication)
+  // ============================================================================
+  const [showFocusOverlay, setShowFocusOverlay] = useState(false);
+  const focusLostTimestampRef = useRef(null); // timestamp of last recorded focus-loss
 
   const socketRef = useRef(null);
   const configRef = useRef(null);
@@ -92,6 +105,54 @@ const ExamInterface = () => {
     }
   }, [examConfig]);
 
+  // ============================================================================
+  // FOCUS-LOSS HANDLER
+  // Records the event through the existing logActivity API (backend is source of truth).
+  // Deduplication: if another focus-loss event fired within DEDUP_WINDOW_MS, ignore it.
+  // Does NOT auto-submit — that is reserved for fullscreen violations.
+  // ============================================================================
+  const handleFocusLost = useCallback(async () => {
+    // Skip if exam is not active
+    if (submissionStatus === 'submitting' || submissionStatus === 'success') return;
+
+    const now = Date.now();
+
+    // Deduplication: ignore if a focus-loss was already recorded within the window
+    if (focusLostTimestampRef.current && (now - focusLostTimestampRef.current) < DEDUP_WINDOW_MS) {
+      return;
+    }
+
+    // Mark the timestamp BEFORE the async call to prevent concurrent duplicates
+    focusLostTimestampRef.current = now;
+
+    // Show the content-protection overlay immediately (Layer 1 + Layer 2)
+    setShowFocusOverlay(true);
+
+    // Log to backend — backend increments warningCount, writes Warning + ActivityLog,
+    // and broadcasts the confirmed count to faculty via socket.
+    // Security: studentId comes from authenticated token, not from request body.
+    try {
+      await studentApi.logExamActivity(sessionId, 'WARNING', 'FOCUS_LOST', 'FOCUS_LOST');
+    } catch (err) {
+      // Security logging failure must NEVER break the exam
+      console.warn('[ExamSecurity] Failed to log FOCUS_LOST event:', err?.message || err);
+    }
+  }, [sessionId, submissionStatus]);
+
+  // ============================================================================
+  // FOCUS-RETURN HANDLER
+  // ============================================================================
+  const handleFocusReturn = useCallback(() => {
+    // Only show toast/remove overlay if we were previously hidden
+    if (showFocusOverlay) {
+      setShowFocusOverlay(false);
+      enqueueSnackbar(
+        'Exam window focus was lost. This activity has been recorded.',
+        { variant: 'warning', autoHideDuration: 5000 }
+      );
+    }
+  }, [showFocusOverlay, enqueueSnackbar]);
+
   // Setup Socket & Security Events
   useEffect(() => {
     if (!user || !examId || !sessionId) return;
@@ -123,12 +184,31 @@ const ExamInterface = () => {
       logout();
     });
 
+    // ============================================================================
+    // FOCUS-LOSS DETECTION — multiple events, single violation (deduplication)
+    // Primary: window.blur (user switches away from window)
+    // Secondary: document.visibilitychange (tab hidden)
+    // Both funnel into handleFocusLost which has the deduplication guard.
+    // ============================================================================
+    const handleBlur = () => {
+      handleFocusLost();
+    };
+
+    const handleFocus = () => {
+      handleFocusReturn();
+    };
+
     const handleVisibilityChange = () => {
-      if (document.hidden) {
-        handleViolation("Tab Switching");
+      if (document.visibilityState === 'hidden') {
+        // Tab/window became hidden — treat as focus loss
+        handleFocusLost();
+      } else if (document.visibilityState === 'visible') {
+        // Tab became visible again — restore
+        handleFocusReturn();
       }
     };
 
+    // Fullscreen change (existing behavior — separate from focus-loss)
     const handleFullscreenChange = () => {
       if (!document.fullscreenElement && configRef.current?.requireFullscreen) {
         handleViolation("Exited Full Screen");
@@ -159,7 +239,12 @@ const ExamInterface = () => {
     window.addEventListener('popstate', handlePopState);
     window.addEventListener('beforeunload', handleBeforeUnload);
 
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    // Focus-loss events (multi-layer, deduplicated)
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Existing security events
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     document.addEventListener("contextmenu", handleContextMenu);
     document.addEventListener("copy", handleCopy);
@@ -169,7 +254,9 @@ const ExamInterface = () => {
     document.addEventListener("selectstart", handleSelectStart);
 
     return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
       document.removeEventListener("contextmenu", handleContextMenu);
       document.removeEventListener("copy", handleCopy);
@@ -181,9 +268,9 @@ const ExamInterface = () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       if (socket) socket.disconnect();
     };
-  }, [user, examId, sessionId]);
+  }, [user, examId, sessionId, handleFocusLost, handleFocusReturn]);
 
-  // Handle Violations
+  // Handle Violations (fullscreen / other existing violations — NOT focus loss)
   const handleViolation = async (type) => {
     setWarningCount(prev => {
       const newCount = prev + 1;
@@ -351,6 +438,8 @@ const ExamInterface = () => {
   };
 
   const handleSubmitClick = () => {
+    // Remove overlay if visible so student can see submit modal
+    if (showFocusOverlay) setShowFocusOverlay(false);
     setShowSubmitModal(true);
   };
 
@@ -476,9 +565,113 @@ const ExamInterface = () => {
         </Box>
       </Paper>
 
-      {/* Main Content Area */}
-      <Box sx={{ display: 'flex', flexGrow: 1, overflow: 'hidden' }}>
-        
+      {/* Main Content Area — position: relative so overlay can be absolutely positioned over it */}
+      <Box sx={{ display: 'flex', flexGrow: 1, overflow: 'hidden', position: 'relative' }}>
+
+        {/* ====================================================================
+            EXAM SECURITY OVERLAY (Layer 1 + Layer 2)
+            Positioned absolutely over the entire exam content area.
+            Appears when browser focus/visibility is lost.
+            Does NOT destroy React state — answers, timer, and session are all preserved.
+            NOTE: This is best-effort deterrence. It cannot block OS-level screenshot tools
+            such as Windows Snipping Tool, Print Screen, or external capture applications.
+        ==================================================================== */}
+        {showFocusOverlay && (
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              // Layer 1 — blurs/obscures the underlying exam content
+              backdropFilter: 'blur(16px)',
+              // Layer 2 — dark overlay above blurred content
+              bgcolor: 'rgba(13, 27, 62, 0.93)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              // Prevent any interaction with exam content below
+              pointerEvents: 'all',
+            }}
+          >
+            <Card
+              elevation={8}
+              sx={{
+                maxWidth: 480,
+                width: '90%',
+                borderRadius: 3,
+                border: '2px solid rgba(255, 255, 255, 0.15)',
+                bgcolor: 'rgba(255,255,255,0.07)',
+                backdropFilter: 'blur(8px)',
+                color: 'white',
+                textAlign: 'center',
+              }}
+            >
+              <CardContent sx={{ p: 5 }}>
+                <Box
+                  sx={{
+                    width: 72,
+                    height: 72,
+                    borderRadius: '50%',
+                    bgcolor: 'rgba(255,152,0,0.18)',
+                    border: '2px solid rgba(255,152,0,0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    mx: 'auto',
+                    mb: 3,
+                  }}
+                >
+                  <ShieldAlert size={36} color="#FF9800" />
+                </Box>
+
+                <Typography
+                  variant="h5"
+                  fontWeight={700}
+                  sx={{ mb: 1.5, color: 'white', letterSpacing: 0.3 }}
+                >
+                  🔒 Exam Content Hidden
+                </Typography>
+
+                <Typography
+                  variant="body1"
+                  sx={{ mb: 2, color: 'rgba(255,255,255,0.85)', lineHeight: 1.7 }}
+                >
+                  Your exam window has lost focus.
+                  <br />
+                  Exam activity has been recorded.
+                </Typography>
+
+                <Box
+                  sx={{
+                    bgcolor: 'rgba(255,152,0,0.12)',
+                    border: '1px solid rgba(255,152,0,0.3)',
+                    borderRadius: 2,
+                    px: 3,
+                    py: 1.5,
+                    mb: 3,
+                  }}
+                >
+                  <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem' }}>
+                    Please return to the examination window to continue.
+                    <br />
+                    Your answers and timer have been preserved.
+                  </Typography>
+                </Box>
+
+                <Typography
+                  variant="caption"
+                  sx={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.72rem', display: 'block', mt: 1 }}
+                >
+                  Best-effort exam security · Cannot block OS-level screen capture
+                </Typography>
+              </CardContent>
+            </Card>
+          </Box>
+        )}
+
         {/* Left Side - Question Area */}
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', p: 3, overflowY: 'auto' }}>
           <Paper elevation={1} sx={{ p: 4, borderRadius: 2, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
@@ -655,7 +848,7 @@ const ExamInterface = () => {
         </Box>
       </Box>
 
-      {/* Warning Modal */}
+      {/* Warning Modal (existing fullscreen/other violations) */}
       <Dialog open={showWarningModal} onClose={() => setShowWarningModal(false)}>
         <DialogTitle sx={{ color: 'error.main', fontWeight: 'bold' }}>Warning!</DialogTitle>
         <DialogContent>

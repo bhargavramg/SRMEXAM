@@ -1069,20 +1069,36 @@ const logActivitySchema = z.object({
 exports.logActivity = async (req, res) => {
   try {
     const { sessionId } = req.params;
+    // studentId always comes from the authenticated token — never from request body
     const studentId = req.user.id;
     const parsed = logActivitySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Invalid data format' });
 
     const { action, details, type } = parsed.data;
 
+    // Verify session exists and belongs to the authenticated student
     const session = await prisma.examSession.findUnique({ where: { id: sessionId } });
     if (!session || session.studentId !== studentId) {
       return res.status(403).json({ error: 'Invalid session' });
     }
 
+    // Verify the session is still active — do not allow logging on completed sessions
+    const activeStatuses = ['IN_PROGRESS'];
+    if (!activeStatuses.includes(session.status)) {
+      return res.status(409).json({ error: 'Session is no longer active' });
+    }
+
+    let updatedSession = session;
+
     if (action === 'WARNING') {
+      // Write the warning record — FOCUS_LOST flows through the same Warning table
       await prisma.warning.create({
-        data: { sessionId, studentId, type: type || 'GENERAL', message: details || 'Warning issued' }
+        data: {
+          sessionId,
+          studentId,
+          type: type || 'GENERAL',
+          message: details || (type === 'FOCUS_LOST' ? 'Exam window lost focus' : 'Warning issued')
+        }
       });
 
       // Increment warning counters on session
@@ -1092,23 +1108,46 @@ exports.logActivity = async (req, res) => {
       } else if (type === 'NETWORK_DISCONNECT') {
         updateData.networkDisconnects = { increment: 1 };
       }
+      // warningCount increments for ALL warning types including FOCUS_LOST
       updateData.warningCount = { increment: 1 };
 
-      await prisma.examSession.update({
+      // Read back the updated session so we have the authoritative warningCount
+      updatedSession = await prisma.examSession.update({
         where: { id: sessionId },
         data: updateData
       });
+
+      // Broadcast the CONFIRMED DB count to faculty via Socket.IO
+      // Backend is the source of truth — the client never supplies the count
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`exam_${session.examId}`).emit('student_warning_alert', {
+          studentId,
+          warningType: type || 'GENERAL',
+          // Use the actual DB value — cannot be spoofed by the browser
+          warningCount: updatedSession.warningCount,
+          sessionId,
+          timestamp: new Date().toISOString()
+        });
+      }
     }
 
     await prisma.activityLog.create({
       data: {
-        userId: studentId, role: 'STUDENT', sessionId, examId: session.examId, action, details,
-        ipAddress: req.ip, browser: req.headers['user-agent']
+        userId: studentId,
+        role: 'STUDENT',
+        sessionId,
+        examId: session.examId,
+        action,
+        details: details || type || null,
+        ipAddress: req.ip,
+        browser: req.headers['user-agent']
       }
     });
 
-    res.json({ success: true });
+    res.json({ success: true, warningCount: updatedSession.warningCount });
   } catch (error) {
+    console.error('[logActivity] Error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

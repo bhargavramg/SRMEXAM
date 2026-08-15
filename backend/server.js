@@ -102,6 +102,9 @@ io.on('connection', (socket) => {
   });
 
   // Live status updates from student (fullscreen, warning count, current question, time remaining)
+  // Note: warningCount here is client-supplied — used for telemetry display only.
+  // Security violations (FOCUS_LOST) are broadcast by the HTTP logActivity handler
+  // with confirmed DB counts, not via this socket path.
   socket.on('student_telemetry', (data) => {
     const { examId, studentId, ...telemetry } = data;
     io.to(`exam_${examId}`).emit('student_telemetry_update', { studentId, ...telemetry, timestamp: new Date() });
@@ -114,7 +117,10 @@ io.on('connection', (socket) => {
     io.to(`session_${oldSessionToken}`).emit('session_terminated');
   });
 
-  // Anti-cheating warning triggered
+  // Anti-cheating warning relay (used for fullscreen/general violations from existing handleViolation flow).
+  // The warningCount here is client-supplied and used as a hint for the UI.
+  // FOCUS_LOST violations are NOT routed through this event — they are broadcast
+  // from the backend logActivity HTTP handler with the authoritative DB warningCount.
   socket.on('trigger_warning', (data) => {
     const { examId, studentId, warningType, warningCount } = data;
     io.to(`exam_${examId}`).emit('student_warning_alert', { studentId, warningType, warningCount, timestamp: new Date() });
