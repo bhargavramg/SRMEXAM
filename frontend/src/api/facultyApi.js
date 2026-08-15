@@ -26,6 +26,8 @@ const facultyApi = {
   updateExam: (id, data) => axiosClient.put(`/faculty/exams/${id}`, data),
   deleteExam: (id) => axiosClient.delete(`/faculty/exams/${id}`),
   publishExam: (id, data) => axiosClient.post(`/faculty/exams/${id}/publish`, data),
+  getExamEligibleStudents: (id) => axiosClient.get(`/faculty/exams/${id}/eligible-students`),
+  republishExam: (id, data) => axiosClient.post(`/faculty/exams/${id}/republish`, data),
 
   // Question Banks
   getQuestionBanks: () => axiosClient.get('/faculty/question-banks'),

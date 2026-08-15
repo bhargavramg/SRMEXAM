@@ -372,6 +372,184 @@ exports.publishExam = async (req, res) => {
 };
 
 // ============================================================================
+// GET ELIGIBLE STUDENTS FOR REPUBLISH — all students under faculty's assignments
+// ============================================================================
+exports.getExamEligibleStudents = async (req, res) => {
+  try {
+    const exam = await prisma.exam.findUnique({
+      where: { id: req.params.id },
+      include: { facultyAssignment: true }
+    });
+    if (!exam) return res.status(404).json({ error: 'Exam not found' });
+    if (exam.facultyAssignment.facultyId !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const assignmentIds = await getFacultyAssignmentIds(req.user.id);
+
+    // Get all students enrolled in ANY of this faculty's assignments
+    const assignmentStudents = await prisma.assignmentStudent.findMany({
+      where: { assignmentId: { in: assignmentIds }, status: 'ACTIVE' },
+      include: {
+        student: {
+          select: { id: true, name: true, email: true, register_no: true, status: true }
+        }
+      }
+    });
+
+    // Deduplicate by studentId — a student may appear in multiple assignments
+    const seen = new Set();
+    const students = [];
+    for (const as of assignmentStudents) {
+      if (!seen.has(as.student.id)) {
+        seen.add(as.student.id);
+        students.push(as.student);
+      }
+    }
+
+    // Also annotate which students are already assigned to this exam
+    const existingExamStudents = await prisma.examStudent.findMany({
+      where: { examId: exam.id },
+      select: { studentId: true }
+    });
+    const alreadyAssigned = new Set(existingExamStudents.map(e => e.studentId));
+
+    const result = students.map(s => ({
+      ...s,
+      alreadyAssigned: alreadyAssigned.has(s.id)
+    }));
+
+    res.json(result);
+  } catch (error) {
+    console.error('getExamEligibleStudents error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// ============================================================================
+// REPUBLISH EXAM — Assign exam to selected students only
+// ============================================================================
+exports.republishExam = async (req, res) => {
+  try {
+    const { studentIds, startTime, endTime } = req.body;
+
+    if (!Array.isArray(studentIds) || studentIds.length === 0) {
+      return res.status(400).json({ error: 'At least one student must be selected for republishing.' });
+    }
+
+    const exam = await prisma.exam.findUnique({
+      where: { id: req.params.id },
+      include: {
+        facultyAssignment: { include: { subject: true } }
+      }
+    });
+
+    if (!exam) return res.status(404).json({ error: 'Exam not found' });
+    if (exam.facultyAssignment.facultyId !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Validate that all studentIds belong to students that are in faculty's assignments
+    const assignmentIds = await getFacultyAssignmentIds(req.user.id);
+    const eligibleStudentRows = await prisma.assignmentStudent.findMany({
+      where: { assignmentId: { in: assignmentIds }, studentId: { in: studentIds }, status: 'ACTIVE' },
+      select: { studentId: true }
+    });
+    const eligibleIds = new Set(eligibleStudentRows.map(r => r.studentId));
+    const validStudentIds = studentIds.filter(id => eligibleIds.has(id));
+
+    if (validStudentIds.length === 0) {
+      return res.status(400).json({ error: 'None of the selected students are eligible for this exam.' });
+    }
+
+    // Upsert ExamStudent records — createMany with skipDuplicates avoids duplicate error
+    await prisma.examStudent.createMany({
+      data: validStudentIds.map(studentId => ({
+        examId: exam.id,
+        studentId,
+        assignedBy: req.user.id
+      })),
+      skipDuplicates: true   // @@unique([examId, studentId]) already prevents dupes
+    });
+
+    // Determine new status based on timing
+    const now = new Date();
+    const finalStartTime = startTime ? new Date(startTime) : exam.startTime;
+    const finalEndTime = endTime ? new Date(endTime) : exam.endTime;
+
+    let newStatus = 'SCHEDULED';
+    if (finalStartTime && finalStartTime <= now) newStatus = 'ACTIVE';
+    if (finalEndTime && finalEndTime <= now) newStatus = 'COMPLETED';
+
+    const updatedExam = await prisma.exam.update({
+      where: { id: exam.id },
+      data: {
+        status: newStatus,
+        startTime: finalStartTime,
+        endTime: finalEndTime,
+        publishedAt: exam.publishedAt ?? now
+      }
+    });
+
+    // Notify only the newly assigned students (skip those already had it)
+    const existingBefore = new Set(
+      (await prisma.examStudent.findMany({
+        where: { examId: exam.id, studentId: { notIn: validStudentIds } },
+        select: { studentId: true }
+      })).map(e => e.studentId)
+    );
+
+    // Send notifications to the selected students
+    await prisma.notification.createMany({
+      data: validStudentIds.map(studentId => ({
+        userId: studentId,
+        examId: exam.id,
+        type: 'EXAM_PUBLISHED',
+        title: 'Exam Republished',
+        message: `${exam.title} for ${exam.facultyAssignment.subject.name} has been republished and is available to you. Duration: ${exam.durationMins} minutes.`
+      })),
+      skipDuplicates: false  // Always send notification on republish
+    });
+
+    // Emit socket notifications
+    const io = req.app.get('io');
+    if (io) {
+      validStudentIds.forEach(studentId => {
+        io.to(`user_${studentId}`).emit('notification', {
+          type: 'EXAM_PUBLISHED',
+          title: 'Exam Republished',
+          message: `${exam.title} has been republished for you.`,
+          examId: exam.id
+        });
+      });
+    }
+
+    // Activity log
+    await prisma.activityLog.create({
+      data: {
+        userId: req.user.id,
+        role: 'FACULTY',
+        examId: exam.id,
+        action: 'EXAM_REPUBLISHED',
+        details: `Republished exam to ${validStudentIds.length} student(s)`,
+        ipAddress: req.ip,
+        browser: req.headers['user-agent']
+      }
+    });
+
+    res.json({
+      success: true,
+      message: `Exam republished to ${validStudentIds.length} student(s) successfully.`,
+      assignedCount: validStudentIds.length,
+      exam: updatedExam
+    });
+  } catch (error) {
+    console.error('republishExam error:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+};
+
+// ============================================================================
 // QUESTION MANAGEMENT
 // ============================================================================
 exports.getQuestions = async (req, res) => {

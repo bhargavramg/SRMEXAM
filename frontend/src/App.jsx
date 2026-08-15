@@ -46,6 +46,7 @@ const QuestionBank = lazy(() => import('./pages/faculty/QuestionBank'))
 const FacultyStudentManagement = lazy(() => import('./pages/faculty/StudentManagement'))
 const CreateExamWizard = lazy(() => import('./pages/faculty/CreateExamWizard'))
 const ManageExams = lazy(() => import('./pages/faculty/ManageExams'))
+const RepublishExam = lazy(() => import('./pages/faculty/RepublishExam'))
 const QuestionCategories = lazy(() => import('./pages/faculty/QuestionCategories'))
 const StudentResults = lazy(() => import('./pages/faculty/StudentResults'))
 const SubmissionEvaluator = lazy(() => import('./pages/faculty/SubmissionEvaluator'))
@@ -230,6 +231,7 @@ function App() {
                     <Route path="students" element={<FacultyStudentManagement />} />
                     <Route path="create-exam" element={<CreateExamWizard />} />
                     <Route path="exams" element={<ManageExams />} />
+                    <Route path="exams/:examId/republish" element={<RepublishExam />} />
                     <Route path="categories" element={<QuestionCategories />} />
                     <Route path="results" element={<StudentResults />} />
                     <Route path="results/evaluate/:sessionId" element={<SubmissionEvaluator />} />

@@ -5,7 +5,7 @@ import facultyApi from '../../api/facultyApi';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
 import { DataTable } from '../../components/tables';
-import { Edit, PlayArrow, Publish, Delete, Assessment } from '@mui/icons-material';
+import { Edit, PlayArrow, Publish, Delete, Assessment, Replay } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import ConfirmDialog from '../../components/ConfirmDialog';
 
@@ -73,9 +73,9 @@ const ManageExams = () => {
     {
       field: 'actions',
       headerName: 'Actions',
-      width: 250,
+      width: 320,
       renderCell: (params) => (
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', py: 0.5 }}>
           <IconButton size="small" color="primary" onClick={() => navigate(`/faculty/exams/${params.row.id}`)}>
             <Edit fontSize="small" />
           </IconButton>
@@ -93,6 +93,21 @@ const ManageExams = () => {
              <Button size="small" variant="outlined" color="info" onClick={() => navigate(`/faculty/results/${params.row.id}`)} startIcon={<Assessment fontSize="small"/>}>
                Results
              </Button>
+          )}
+          {params.row.status !== 'DRAFT' && (
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => navigate(`/faculty/exams/${params.row.id}/republish`)}
+              startIcon={<Replay fontSize="small" />}
+              sx={{
+                borderColor: '#F59E0B',
+                color: '#B45309',
+                '&:hover': { bgcolor: 'rgba(245,158,11,0.08)', borderColor: '#D97706' },
+              }}
+            >
+              Republish
+            </Button>
           )}
         </Box>
       )

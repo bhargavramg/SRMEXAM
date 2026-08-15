@@ -31,6 +31,8 @@ router.post('/exams', faculty.createExam);
 router.put('/exams/:id', faculty.updateExam);
 router.delete('/exams/:id', faculty.deleteExam);
 router.post('/exams/:id/publish', faculty.publishExam);
+router.get('/exams/:id/eligible-students', faculty.getExamEligibleStudents);
+router.post('/exams/:id/republish', faculty.republishExam);
 
 // Categories
 router.get('/categories', faculty.getCategories);
