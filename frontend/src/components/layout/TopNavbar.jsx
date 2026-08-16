@@ -61,22 +61,21 @@ const TopNavbar = ({ onMenuClick, isMobile, role }) => {
           </IconButton>
         )}
 
-        <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'center', px: { xs: 1, md: 3 }, overflow: 'hidden' }}>
+        <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', px: { xs: 1, md: 3 }, overflow: 'hidden' }}>
           {role === 'Student' && currentQuote && (
             <Typography 
               variant="body2" 
               sx={{ 
                 fontStyle: 'italic', 
-                color: 'text.secondary',
-                fontSize: { xs: '0.75rem', sm: '0.85rem' },
+                color: '#6b7280', // medium gray
+                fontSize: '14px',
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
-                opacity: 0.9,
                 fontWeight: 500
               }}
             >
-              {currentQuote}
+              "{currentQuote}"
             </Typography>
           )}
         </Box>
