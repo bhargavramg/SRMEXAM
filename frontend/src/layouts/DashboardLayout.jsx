@@ -44,16 +44,14 @@ const DashboardLayout = () => {
           [`& .MuiDrawer-paper`]: { width: drawerWidth, boxSizing: 'border-box', borderRight: '1px solid #E3F2FD' },
         }}
       >
-        <Box sx={{ width: '100%', height: 150, display: 'flex', alignItems: 'center', justifyContent: 'center', p: '12px 16px', boxSizing: 'border-box', overflow: 'hidden' }}>
+        <Box sx={{ width: '100%', height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2, boxSizing: 'border-box' }}>
           <Box
             component="img"
             src="/srm-logo.jpeg"
             alt="SRM Institute of Science and Technology"
             sx={{
-              maxWidth: '100%',
-              maxHeight: '100%',
-              width: 'auto',
-              height: 'auto',
+              width: '100%',
+              height: '100%',
               objectFit: 'contain',
               display: 'block',
             }}
