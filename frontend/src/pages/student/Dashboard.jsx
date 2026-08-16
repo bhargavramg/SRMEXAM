@@ -54,31 +54,70 @@ const StudentDashboard = () => {
       </Typography>
       
       {data?.activeExams?.length === 0 ? (
-        <Typography color="text.secondary">No active exams at the moment.</Typography>
+        <Typography color="text.secondary" sx={{ mb: 4 }}>No active exams at the moment.</Typography>
       ) : (
-        data?.activeExams?.map((exam) => (
-          <Card key={exam.id} sx={{ borderRadius: 3, borderLeft: '6px solid #1565C0', mb: 2 }}>
+        <Box sx={{ mb: 4 }}>
+          {data?.activeExams?.map((exam) => (
+            <Card key={exam.id} sx={{ borderRadius: 3, borderLeft: '6px solid #1565C0', mb: 2 }}>
+              <CardContent sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 3 }}>
+                <Box>
+                  <Typography variant="h6" color="primary.main" fontWeight={700}>
+                    {exam.title} ({exam.facultyAssignment?.subject?.name})
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1, color: 'text.secondary' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Clock size={16} /> <Typography variant="body2">{exam.durationMins} Minutes</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <AlertCircle size={16} /> <Typography variant="body2">{exam.totalMarks} Marks</Typography>
+                    </Box>
+                  </Box>
+                </Box>
+                <Button 
+                  variant="contained" 
+                  size="large" 
+                  sx={{ px: 4 }}
+                  onClick={() => navigate(`/student/exam/${exam.id}/instructions`)}
+                >
+                  Enter Exam
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </Box>
+      )}
+
+      {/* Upcoming Exam Section */}
+      <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>
+        Upcoming Examinations
+      </Typography>
+      
+      {data?.upcomingExams?.length === 0 ? (
+        <Typography color="text.secondary">No upcoming exams at the moment.</Typography>
+      ) : (
+        data?.upcomingExams?.map((exam) => (
+          <Card key={exam.id} sx={{ borderRadius: 3, borderLeft: '6px solid #9E9E9E', mb: 2, opacity: 0.8 }}>
             <CardContent sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 3 }}>
               <Box>
-                <Typography variant="h6" color="primary.main" fontWeight={700}>
+                <Typography variant="h6" color="text.primary" fontWeight={700}>
                   {exam.title} ({exam.facultyAssignment?.subject?.name})
                 </Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1, color: 'text.secondary' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Clock size={16} /> <Typography variant="body2">{exam.durationMins} Minutes</Typography>
+                    <Calendar size={16} /> <Typography variant="body2">Starts: {new Date(exam.startTime).toLocaleString()}</Typography>
                   </Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <AlertCircle size={16} /> <Typography variant="body2">{exam.totalMarks} Marks</Typography>
+                    <Clock size={16} /> <Typography variant="body2">{exam.durationMins} Minutes</Typography>
                   </Box>
                 </Box>
               </Box>
               <Button 
-                variant="contained" 
+                variant="outlined" 
                 size="large" 
                 sx={{ px: 4 }}
-                onClick={() => navigate(`/student/exam/${exam.id}/instructions`)}
+                disabled
               >
-                Enter Exam
+                Not Started
               </Button>
             </CardContent>
           </Card>
