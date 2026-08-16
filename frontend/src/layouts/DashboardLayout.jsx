@@ -47,7 +47,7 @@ const DashboardLayout = () => {
         <Box sx={{ width: '100%', height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2, boxSizing: 'border-box' }}>
           <Box
             component="img"
-            src="/srm-logo.jpg"
+            src="/srm-logo.png"
             alt="SRM Institute of Science and Technology"
             sx={{
               width: '100%',
