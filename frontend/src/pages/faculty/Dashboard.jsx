@@ -71,52 +71,13 @@ const Dashboard = () => {
     <Box sx={{ bgcolor: '#F8FAFC', minHeight: '100vh', p: { xs: 2, md: 4 } }}>
       
       {/* HEADER SECTION */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 5, flexWrap: 'wrap', gap: 2 }}>
-        <Box>
-          <Typography variant="h4" fontWeight={700} color="primary.dark" gutterBottom>
-            Welcome back, {user?.name || 'Faculty Member'}
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Faculty overview and examination activity
-          </Typography>
-        </Box>
-        <Stack direction="row" spacing={2} alignItems="center">
-          <IconButton 
-            onClick={() => refetch()} 
-            disabled={isFetching}
-            sx={{ 
-              bgcolor: 'white', 
-              boxShadow: '0 1px 3px rgba(0,0,0,0.05)', 
-              color: 'primary.main',
-              '&:hover': { bgcolor: 'primary.50' }
-            }}
-          >
-            <RefreshIcon size={20} style={isFetching ? { animation: 'spin 1s linear infinite' } : {}} />
-          </IconButton>
-          <IconButton 
-            onClick={() => navigate('/faculty/notifications')}
-            sx={{ 
-              bgcolor: 'white', 
-              boxShadow: '0 1px 3px rgba(0,0,0,0.05)', 
-              color: 'primary.main',
-              '&:hover': { bgcolor: 'primary.50' }
-            }}
-          >
-            <NotificationsIcon size={20} />
-          </IconButton>
-          <Avatar 
-            sx={{ 
-              bgcolor: 'primary.main', 
-              color: 'white', 
-              width: 44, 
-              height: 44, 
-              fontWeight: 600,
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-            }}
-          >
-            {user?.name ? user.name.charAt(0).toUpperCase() : 'F'}
-          </Avatar>
-        </Stack>
+      <Box sx={{ mb: 5 }}>
+        <Typography variant="h4" fontWeight={700} color="primary.dark" gutterBottom>
+          Welcome back, {user?.name || 'Faculty Member'}
+        </Typography>
+        <Typography variant="body1" color="text.secondary">
+          Faculty overview and examination activity
+        </Typography>
       </Box>
 
       {/* KPI CARDS */}
