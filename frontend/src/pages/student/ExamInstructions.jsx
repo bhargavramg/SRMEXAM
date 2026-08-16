@@ -141,6 +141,65 @@ const ExamInstructions = () => {
     queryFn: () => studentApi.getExamDetails(examId),
   });
 
+  const [timeRemaining, setTimeRemaining] = useState(0);
+  const [examStatus, setExamStatus] = useState('LOADING'); // 'LOADING', 'NOT_STARTED', 'AVAILABLE', 'ENDED'
+
+  // ── countdown timer ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!exam) return;
+
+    const calculateStatus = () => {
+      const now = new Date();
+      
+      // If backend explicitly marked it completed/closed
+      if (['COMPLETED', 'CLOSED', 'EVALUATION', 'RESULTS_PUBLISHED'].includes(exam.status)) {
+        return { status: 'ENDED', remaining: 0 };
+      }
+      
+      // If end time has passed
+      if (exam.endTime && new Date(exam.endTime) <= now) {
+        return { status: 'ENDED', remaining: 0 };
+      }
+
+      // If start time is in the future
+      if (exam.startTime) {
+        const start = new Date(exam.startTime);
+        if (start > now) {
+          return { 
+            status: 'NOT_STARTED', 
+            remaining: Math.max(0, Math.floor((start.getTime() - now.getTime()) / 1000)) 
+          };
+        }
+      }
+      
+      return { status: 'AVAILABLE', remaining: 0 };
+    };
+
+    const updateTimer = () => {
+      const { status, remaining } = calculateStatus();
+      setExamStatus(status);
+      setTimeRemaining(remaining);
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [exam]);
+
+  const formatTimeRemaining = (seconds) => {
+    if (seconds <= 0) return '';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    
+    const parts = [];
+    if (h > 0) parts.push(`${h} hour${h !== 1 ? 's' : ''}`);
+    if (m > 0 || h > 0) parts.push(`${m} minute${m !== 1 ? 's' : ''}`);
+    parts.push(`${s} second${s !== 1 ? 's' : ''}`);
+    
+    return parts.join(' ');
+  };
+
   // ── fullscreen tracking ──────────────────────────────────────────────────
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -280,7 +339,7 @@ const ExamInstructions = () => {
   }
 
   const requiresFullscreen = exam?.config?.requireFullscreen !== false;
-  const canProceed = agreed && (!requiresFullscreen || fullscreenEnabled);
+  const canProceed = agreed && (!requiresFullscreen || fullscreenEnabled) && examStatus === 'AVAILABLE';
 
   return (
     <Box
@@ -683,6 +742,76 @@ const ExamInstructions = () => {
               sx={{ m: 0, alignItems: 'flex-start' }}
             />
           </Box>
+
+          {/* ── Exam Availability Status ──────────────────────────────────── */}
+          {exam && examStatus !== 'LOADING' && (
+            <Box
+              sx={{
+                p: 2.5,
+                borderRadius: 3,
+                border: examStatus === 'AVAILABLE' 
+                  ? '1.5px solid rgba(16,185,129,0.35)' 
+                  : examStatus === 'ENDED' 
+                    ? '1.5px solid rgba(239,68,68,0.35)'
+                    : '1.5px solid rgba(245,158,11,0.35)',
+                background: examStatus === 'AVAILABLE'
+                  ? 'rgba(16,185,129,0.04)'
+                  : examStatus === 'ENDED'
+                    ? 'rgba(239,68,68,0.04)'
+                    : 'rgba(245,158,11,0.04)',
+                mb: 3,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 2,
+                flexWrap: 'wrap',
+                transition: 'all 0.25s ease',
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <Box
+                  sx={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: examStatus === 'AVAILABLE'
+                      ? 'rgba(16,185,129,0.15)'
+                      : examStatus === 'ENDED'
+                        ? 'rgba(239,68,68,0.15)'
+                        : 'rgba(245,158,11,0.15)',
+                    color: examStatus === 'AVAILABLE'
+                      ? '#10B981'
+                      : examStatus === 'ENDED'
+                        ? '#EF4444'
+                        : '#F59E0B',
+                  }}
+                >
+                  {examStatus === 'AVAILABLE' ? <CheckCircle2 size={18} /> : examStatus === 'ENDED' ? <AlertTriangle size={18} /> : <Clock size={18} />}
+                </Box>
+                <Box>
+                  <Typography variant="body2" fontWeight={700} color="text.primary">
+                    {examStatus === 'AVAILABLE' 
+                      ? 'Exam is now available' 
+                      : examStatus === 'ENDED'
+                        ? 'Exam has ended'
+                        : `Exam starts at ${new Date(exam.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                    }
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {examStatus === 'AVAILABLE' 
+                      ? 'You can now proceed to start the exam.'
+                      : examStatus === 'ENDED'
+                        ? 'This exam is no longer accepting new submissions.'
+                        : `Starts in ${formatTimeRemaining(timeRemaining)}`
+                    }
+                  </Typography>
+                </Box>
+              </Box>
+            </Box>
+          )}
 
           {/* ── CTA Button ──────────────────────────────────────────────── */}
           <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
