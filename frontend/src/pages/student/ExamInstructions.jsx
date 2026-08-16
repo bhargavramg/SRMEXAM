@@ -132,6 +132,8 @@ const ExamInstructions = () => {
   const [agreed, setAgreed] = useState(false);
   const [fullscreenEnabled, setFullscreenEnabled] = useState(false);
   const [enablingFullscreen, setEnablingFullscreen] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [showLoadingScreen, setShowLoadingScreen] = useState(false);
 
   // Reuse the same API call that ExamLobby uses
   const { data: exam, isLoading, isError } = useQuery({
@@ -180,8 +182,8 @@ const ExamInstructions = () => {
     }
   }, [enqueueSnackbar]);
 
-  // ── proceed to lobby (which handles session start) ───────────────────────
-  const handleProceed = useCallback(() => {
+  // ── proceed to exam directly (bypassing lobby) ───────────────────────
+  const handleProceed = useCallback(async () => {
     const requiresFullscreen = exam?.config?.requireFullscreen !== false; // default true
     if (requiresFullscreen && !document.fullscreenElement) {
       setFullscreenEnabled(false);
@@ -194,8 +196,26 @@ const ExamInstructions = () => {
       });
       return;
     }
-    // Navigate to the existing lobby which handles session creation
-    navigate(`/student/exam/${examId}/lobby`);
+
+    setStarting(true);
+    try {
+      setShowLoadingScreen(true);
+      // Reuse the imported studentApi from line 139
+      const session = await studentApi.startExamSession(examId);
+
+      setTimeout(() => {
+        navigate(`/student/exam/${examId}/take/${session.id}`);
+      }, 2500);
+
+    } catch (error) {
+      console.error("Failed to start exam backend response:", error);
+      enqueueSnackbar("Failed to start exam: " + (error.error || error.message || 'Unknown error'), { variant: 'error' });
+      setStarting(false);
+      setShowLoadingScreen(false);
+      if (document.fullscreenElement) {
+         document.exitFullscreen().catch(e => console.log(e));
+      }
+    }
   }, [agreed, exam, examId, navigate, enqueueSnackbar]);
 
   // ── loading / error states ───────────────────────────────────────────────
@@ -234,6 +254,26 @@ const ExamInstructions = () => {
         <Alert severity="error" sx={{ maxWidth: 480 }}>
           Unable to load examination details. Please go back and try again.
         </Alert>
+      </Box>
+    );
+  }
+
+  if (showLoadingScreen) {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '100vh',
+          background: 'linear-gradient(160deg, #EEF4FF 0%, #F8FAFC 50%, #F0F7FF 100%)',
+        }}
+      >
+        <CircularProgress size={60} thickness={4} />
+        <Typography variant="h5" sx={{ mt: 4, color: 'primary.main', fontWeight: 600 }}>
+          Preparing Secure Examination Environment...
+        </Typography>
       </Box>
     );
   }
@@ -648,9 +688,9 @@ const ExamInstructions = () => {
             <Button
               variant="contained"
               size="large"
-              disabled={!canProceed}
+              disabled={!canProceed || starting}
               onClick={handleProceed}
-              endIcon={<ArrowRight size={18} />}
+              endIcon={!starting && <ArrowRight size={18} />}
               sx={{
                 px: 5,
                 py: 1.5,
@@ -658,14 +698,14 @@ const ExamInstructions = () => {
                 fontWeight: 700,
                 fontFamily: '"Poppins", sans-serif',
                 borderRadius: 3,
-                background: canProceed
+                background: canProceed && !starting
                   ? 'linear-gradient(135deg, #1565C0 0%, #0D47A1 100%)'
                   : undefined,
-                boxShadow: canProceed
+                boxShadow: canProceed && !starting
                   ? '0 4px 16px rgba(21,101,192,0.35)'
                   : 'none',
                 transition: 'all 0.2s ease',
-                '&:hover': canProceed
+                '&:hover': canProceed && !starting
                   ? {
                       background: 'linear-gradient(135deg, #1976D2 0%, #1565C0 100%)',
                       boxShadow: '0 6px 24px rgba(21,101,192,0.45)',
@@ -675,7 +715,7 @@ const ExamInstructions = () => {
                 '&:active': { transform: 'translateY(0px)' },
               }}
             >
-              Agree &amp; Start Exam
+              {starting ? <CircularProgress size={24} color="inherit" /> : 'Agree & Start Exam'}
             </Button>
           </Box>
         </Box>
