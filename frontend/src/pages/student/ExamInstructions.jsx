@@ -88,9 +88,9 @@ const RuleRow = ({ icon, title, description }) => (
     sx={{
       display: 'flex',
       alignItems: 'flex-start',
-      gap: 2,
-      py: 1.5,
-      px: 2,
+      gap: 1.5,
+      py: 1,
+      px: 1.5,
       borderRadius: 2,
       transition: 'background 0.15s',
       '&:hover': { background: 'rgba(21,101,192,0.03)' },
@@ -350,7 +350,7 @@ const ExamInstructions = () => {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'flex-start',
-        py: { xs: 3, md: 5 },
+        py: { xs: 2, md: 3 },
         px: 2,
       }}
     >
@@ -360,7 +360,7 @@ const ExamInstructions = () => {
           display: 'flex',
           alignItems: 'center',
           gap: 1.5,
-          mb: 4,
+          mb: 2.5,
         }}
       >
         {/* SRM ExamPortal Logo — inline SVG from favicon.svg */}
@@ -402,8 +402,8 @@ const ExamInstructions = () => {
         <Box
           sx={{
             background: 'linear-gradient(135deg, #1565C0 0%, #0D47A1 60%, #1a237e 100%)',
-            px: { xs: 3, md: 5 },
-            py: { xs: 3, md: 4 },
+            px: { xs: 2.5, md: 4 },
+            py: { xs: 2, md: 2.5 },
             position: 'relative',
             overflow: 'hidden',
           }}
@@ -483,7 +483,7 @@ const ExamInstructions = () => {
         </Box>
 
         {/* Card Body */}
-        <Box sx={{ px: { xs: 3, md: 5 }, py: { xs: 3, md: 4 } }}>
+        <Box sx={{ px: { xs: 2.5, md: 4 }, py: { xs: 2, md: 3 } }}>
 
           {/* ── Exam Stats ──────────────────────────────────────────────── */}
           <Typography
@@ -498,9 +498,9 @@ const ExamInstructions = () => {
             sx={{
               display: 'flex',
               flexWrap: 'wrap',
-              gap: 2,
-              mt: 1.5,
-              mb: 3.5,
+              gap: 1.5,
+              mt: 1,
+              mb: 2.5,
             }}
           >
             <StatCard
@@ -529,11 +529,11 @@ const ExamInstructions = () => {
             />
           </Box>
 
-          <Divider sx={{ mb: 3 }} />
+          <Divider sx={{ mb: 2.5 }} />
 
           {/* ── Integrity Rules ──────────────────────────────────────────── */}
-          <Box sx={{ mb: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+          <Box sx={{ mb: 2.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
               <ShieldAlert size={18} color="#EF4444" />
               <Typography
                 variant="subtitle1"
@@ -588,14 +588,14 @@ const ExamInstructions = () => {
           {/* ── General Instructions ─────────────────────────────────────── */}
           <Box
             sx={{
-              mb: 3,
-              p: 2.5,
+              mb: 2.5,
+              p: 2,
               borderRadius: 3,
               background: 'linear-gradient(135deg, #EFF6FF 0%, #F0FDF4 100%)',
               border: '1.5px solid rgba(21,101,192,0.12)',
             }}
           >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
               <CheckCircle2 size={16} color="#1565C0" />
               <Typography variant="subtitle2" fontWeight={700} color="primary.dark">
                 General Instructions
@@ -608,7 +608,7 @@ const ExamInstructions = () => {
               'Submit your exam before the timer runs out. The exam auto-submits when time expires.',
               'Results will be available after the faculty completes evaluation.',
             ].map((text, i) => (
-              <Box key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 0.75 }}>
+              <Box key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 0.5 }}>
                 <Box
                   sx={{
                     mt: 0.6,
@@ -626,19 +626,19 @@ const ExamInstructions = () => {
             ))}
           </Box>
 
-          <Divider sx={{ mb: 3 }} />
+          <Divider sx={{ mb: 2.5 }} />
 
           {/* ── Fullscreen Requirement ───────────────────────────────────── */}
           {requiresFullscreen && (
-            <Box sx={{ mb: 2.5 }}>
+            <Box sx={{ mb: 2 }}>
               <Box
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   flexWrap: 'wrap',
-                  gap: 2,
-                  p: 2.5,
+                  gap: 1.5,
+                  p: 2,
                   borderRadius: 3,
                   border: fullscreenEnabled
                     ? '1.5px solid rgba(16,185,129,0.35)'
@@ -712,13 +712,13 @@ const ExamInstructions = () => {
           {/* ── Agreement Checkbox ───────────────────────────────────────── */}
           <Box
             sx={{
-              p: 2.5,
+              p: 2,
               borderRadius: 3,
               border: agreed
                 ? '1.5px solid rgba(16,185,129,0.35)'
                 : '1.5px solid rgba(21,101,192,0.18)',
               background: agreed ? 'rgba(16,185,129,0.04)' : 'rgba(21,101,192,0.03)',
-              mb: 3,
+              mb: 2,
               transition: 'all 0.25s ease',
             }}
           >
@@ -747,7 +747,7 @@ const ExamInstructions = () => {
           {exam && examStatus !== 'LOADING' && (
             <Box
               sx={{
-                p: 2.5,
+                p: 2,
                 borderRadius: 3,
                 border: examStatus === 'AVAILABLE' 
                   ? '1.5px solid rgba(16,185,129,0.35)' 
@@ -759,11 +759,11 @@ const ExamInstructions = () => {
                   : examStatus === 'ENDED'
                     ? 'rgba(239,68,68,0.04)'
                     : 'rgba(245,158,11,0.04)',
-                mb: 3,
+                mb: 2.5,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                gap: 2,
+                gap: 1.5,
                 flexWrap: 'wrap',
                 transition: 'all 0.25s ease',
               }}
@@ -855,7 +855,7 @@ const ExamInstructions = () => {
       <Typography
         variant="caption"
         color="text.disabled"
-        sx={{ mt: 3, textAlign: 'center', maxWidth: 600 }}
+        sx={{ mt: 2, textAlign: 'center', maxWidth: 600 }}
       >
         By proceeding, you confirm that you are the registered student for this examination and that
         you will adhere to SRM's academic integrity policy.
