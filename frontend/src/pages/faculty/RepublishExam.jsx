@@ -150,7 +150,7 @@ const RepublishExam = () => {
   // ── Confirm & submit ───────────────────────────────────────────────────────
   const handleRepublish = () => {
     if (selectedIds.size === 0) {
-      enqueueSnackbar('Please select at least one student.', { variant: 'warning' });
+      enqueueSnackbar('Please select at least one student.', { variant: 'warning', autoHideDuration: 5000 });
       return;
     }
     setConfirmOpen(true);

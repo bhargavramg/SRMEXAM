@@ -12,7 +12,7 @@ export const useNotification = () => {
 const AUTO_HIDE_DURATION = {
   success: 3000,
   error: 5000,
-  warning: 4000,
+  warning: 5000,
   info: 3000,
 };
 

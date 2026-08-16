@@ -170,6 +170,7 @@ const ExamInstructions = () => {
       } else {
         enqueueSnackbar('Could not enter fullscreen. Please allow it in your browser settings.', {
           variant: 'warning',
+          autoHideDuration: 5000
         });
       }
     } catch (err) {

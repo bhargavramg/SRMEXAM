@@ -53,7 +53,7 @@ const AssignSubjectModal = ({ open, onClose, facultyId }) => {
 
   const handleSave = () => {
     if (!formData.subjectId || !formData.assessmentTypeId) {
-      enqueueSnackbar('Please fill all required fields', { variant: 'warning' });
+      enqueueSnackbar('Please fill all required fields', { variant: 'warning', autoHideDuration: 5000 });
       return;
     }
     assignMutation.mutate({

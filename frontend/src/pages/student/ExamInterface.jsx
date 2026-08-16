@@ -226,7 +226,7 @@ const ExamInterface = () => {
     const handlePopState = (e) => {
       e.preventDefault();
       window.history.pushState(null, "", window.location.href);
-      enqueueSnackbar("Navigation is disabled during the examination.", { variant: 'warning' });
+      enqueueSnackbar("Navigation is disabled during the examination.", { variant: 'warning', autoHideDuration: 5000 });
     };
     
     // Prevent accidental tab close
@@ -397,7 +397,7 @@ const ExamInterface = () => {
   const forceSubmitExam = async (reason) => {
     if (submissionStatus === 'submitting' || submissionStatus === 'success') return;
     setSubmissionStatus('submitting');
-    enqueueSnackbar(reason, { variant: 'warning', persist: true });
+    enqueueSnackbar(reason, { variant: 'warning', autoHideDuration: 5000 });
     try {
       const result = await studentApi.submitExam(sessionId, getEnhancedAnswers(), true);
       if (document.fullscreenElement) {

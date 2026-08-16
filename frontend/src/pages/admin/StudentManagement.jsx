@@ -136,7 +136,7 @@ const StudentManagement = () => {
 
   const handleExport = () => {
     if (!listData?.content || listData.content.length === 0) {
-      enqueueSnackbar("No data available to export", { variant: 'warning' });
+      enqueueSnackbar("No data available to export", { variant: 'warning', autoHideDuration: 5000 });
       return;
     }
     const exportData = listData.content.map(student => {
