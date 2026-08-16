@@ -14,6 +14,26 @@ const TopNavbar = ({ onMenuClick, isMobile, role }) => {
   const handleMenu = (event) => setAnchorEl(event.currentTarget);
   const handleClose = () => setAnchorEl(null);
 
+  const [currentQuote, setCurrentQuote] = React.useState('');
+
+  React.useEffect(() => {
+    if (role === 'Student') {
+      const quotes = [
+        "Your marks measure your answers. Your choices measure your character.",
+        "Let your result be something you earned, not something you borrowed.",
+        "A genuine score may be imperfect, but it will always be yours.",
+        "The real achievement is not getting the highest score, but knowing you earned it.",
+        "When no one is watching, your choices still define you.",
+        "Write what you know. Learn from what you don't. Grow from every attempt.",
+        "A score lasts for a moment. The character behind it lasts a lifetime.",
+        "Your effort is the answer sheet that life remembers.",
+        "Don't chase a perfect score. Chase a result you can be proud of.",
+        "The best result is one you never had to explain."
+      ];
+      setCurrentQuote(quotes[Math.floor(Math.random() * quotes.length)]);
+    }
+  }, [role]);
+
   return (
     <AppBar 
       position="fixed" 
@@ -41,7 +61,25 @@ const TopNavbar = ({ onMenuClick, isMobile, role }) => {
           </IconButton>
         )}
 
-        <Box sx={{ flexGrow: 1 }} />
+        <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'center', px: { xs: 1, md: 3 }, overflow: 'hidden' }}>
+          {role === 'Student' && currentQuote && (
+            <Typography 
+              variant="body2" 
+              sx={{ 
+                fontStyle: 'italic', 
+                color: 'text.secondary',
+                fontSize: { xs: '0.75rem', sm: '0.85rem' },
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                opacity: 0.9,
+                fontWeight: 500
+              }}
+            >
+              {currentQuote}
+            </Typography>
+          )}
+        </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 } }}>
           {!isOnline && (
