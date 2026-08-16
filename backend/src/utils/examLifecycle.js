@@ -11,10 +11,19 @@ const updateGlobalExamStatuses = async () => {
   await prisma.exam.updateMany({
     where: { 
       status: 'SCHEDULED', 
-      startTime: { lte: now },
-      OR: [
-        { endTime: null },
-        { endTime: { gt: now } }
+      AND: [
+        {
+          OR: [
+            { startTime: { lte: now } },
+            { startTime: null }
+          ]
+        },
+        {
+          OR: [
+            { endTime: null },
+            { endTime: { gt: now } }
+          ]
+        }
       ]
     },
     data: { status: 'ACTIVE' }
