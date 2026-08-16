@@ -38,8 +38,8 @@ const StatCard = ({ icon, label, value, accent }) => (
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
-      gap: 0.5,
-      p: 1.5,
+      gap: 1,
+      p: 2,
       borderRadius: 3,
       background: accent
         ? `linear-gradient(135deg, ${accent}18 0%, ${accent}08 100%)`
@@ -54,8 +54,8 @@ const StatCard = ({ icon, label, value, accent }) => (
   >
     <Box
       sx={{
-        width: 36,
-        height: 36,
+        width: 42,
+        height: 42,
         borderRadius: 2,
         display: 'flex',
         alignItems: 'center',
@@ -88,9 +88,9 @@ const RuleRow = ({ icon, title, description }) => (
     sx={{
       display: 'flex',
       alignItems: 'flex-start',
-      gap: 1.25,
-      py: 0.75,
-      px: 1.5,
+      gap: 1.5,
+      py: 1.25,
+      px: 2,
       borderRadius: 2,
       transition: 'background 0.15s',
       '&:hover': { background: 'rgba(21,101,192,0.03)' },
@@ -99,8 +99,8 @@ const RuleRow = ({ icon, title, description }) => (
     <Box
       sx={{
         mt: 0.25,
-        width: 28,
-        height: 28,
+        width: 32,
+        height: 32,
         borderRadius: 2,
         flexShrink: 0,
         display: 'flex',
@@ -350,7 +350,7 @@ const ExamInstructions = () => {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'flex-start',
-        py: { xs: 1.5, md: 2 },
+        py: { xs: 2.5, md: 3 },
         px: 2,
       }}
     >
@@ -360,7 +360,7 @@ const ExamInstructions = () => {
           display: 'flex',
           alignItems: 'center',
           gap: 1.5,
-          mb: 1.5,
+          mb: 2.5,
         }}
       >
         {/* SRM ExamPortal Logo — inline SVG from favicon.svg */}
@@ -403,7 +403,7 @@ const ExamInstructions = () => {
           sx={{
             background: 'linear-gradient(135deg, #1565C0 0%, #0D47A1 60%, #1a237e 100%)',
             px: { xs: 2.5, md: 4 },
-            py: { xs: 1.5, md: 2 },
+            py: { xs: 2.5, md: 3 },
             position: 'relative',
             overflow: 'hidden',
           }}
@@ -450,9 +450,9 @@ const ExamInstructions = () => {
               color: '#fff',
               fontWeight: 700,
               fontFamily: '"Poppins", sans-serif',
-              lineHeight: 1.2,
-              mb: 0.25,
-              fontSize: { xs: '1.3rem', sm: '1.5rem' },
+              lineHeight: 1.25,
+              mb: 0.5,
+              fontSize: { xs: '1.4rem', sm: '1.6rem' },
             }}
           >
             {exam.title}
@@ -483,7 +483,7 @@ const ExamInstructions = () => {
         </Box>
 
         {/* Card Body */}
-        <Box sx={{ px: { xs: 2.5, md: 4 }, py: { xs: 1.5, md: 2 } }}>
+        <Box sx={{ px: { xs: 2.5, md: 4 }, py: { xs: 2.5, md: 3 } }}>
 
           {/* ── Exam Stats ──────────────────────────────────────────────── */}
           <Typography
@@ -498,9 +498,9 @@ const ExamInstructions = () => {
             sx={{
               display: 'flex',
               flexWrap: 'wrap',
-              gap: 1.5,
-              mt: 1,
-              mb: 1.5,
+              gap: 2,
+              mt: 1.5,
+              mb: 2.5,
             }}
           >
             <StatCard
@@ -529,11 +529,11 @@ const ExamInstructions = () => {
             />
           </Box>
 
-          <Divider sx={{ mb: 1.5 }} />
+          <Divider sx={{ mb: 2.5 }} />
 
           {/* ── Integrity Rules ──────────────────────────────────────────── */}
-          <Box sx={{ mb: 1.5 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+          <Box sx={{ mb: 2.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
               <ShieldAlert size={18} color="#EF4444" />
               <Typography
                 variant="subtitle1"
@@ -588,14 +588,14 @@ const ExamInstructions = () => {
           {/* ── General Instructions ─────────────────────────────────────── */}
           <Box
             sx={{
-              mb: 1.5,
-              p: 1.5,
+              mb: 2.5,
+              p: 2,
               borderRadius: 3,
               background: 'linear-gradient(135deg, #EFF6FF 0%, #F0FDF4 100%)',
               border: '1.5px solid rgba(21,101,192,0.12)',
             }}
           >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.25 }}>
               <CheckCircle2 size={16} color="#1565C0" />
               <Typography variant="subtitle2" fontWeight={700} color="primary.dark">
                 General Instructions
@@ -608,10 +608,10 @@ const ExamInstructions = () => {
               'Submit your exam before the timer runs out. The exam auto-submits when time expires.',
               'Results will be available after the faculty completes evaluation.',
             ].map((text, i) => (
-              <Box key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 0.25 }}>
+              <Box key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 0.5 }}>
                 <Box
                   sx={{
-                    mt: 0.5,
+                    mt: 0.6,
                     width: 6,
                     height: 6,
                     borderRadius: '50%',
@@ -626,11 +626,11 @@ const ExamInstructions = () => {
             ))}
           </Box>
 
-          <Divider sx={{ mb: 1.5 }} />
+          <Divider sx={{ mb: 2.5 }} />
 
           {/* ── Fullscreen Requirement ───────────────────────────────────── */}
           {requiresFullscreen && (
-            <Box sx={{ mb: 1.5 }}>
+            <Box sx={{ mb: 2 }}>
               <Box
                 sx={{
                   display: 'flex',
@@ -638,7 +638,7 @@ const ExamInstructions = () => {
                   justifyContent: 'space-between',
                   flexWrap: 'wrap',
                   gap: 1.5,
-                  p: 1.5,
+                  p: 2,
                   borderRadius: 3,
                   border: fullscreenEnabled
                     ? '1.5px solid rgba(16,185,129,0.35)'
@@ -712,13 +712,13 @@ const ExamInstructions = () => {
           {/* ── Agreement Checkbox ───────────────────────────────────────── */}
           <Box
             sx={{
-              p: 1.5,
+              p: 2,
               borderRadius: 3,
               border: agreed
                 ? '1.5px solid rgba(16,185,129,0.35)'
                 : '1.5px solid rgba(21,101,192,0.18)',
               background: agreed ? 'rgba(16,185,129,0.04)' : 'rgba(21,101,192,0.03)',
-              mb: 1.5,
+              mb: 2.5,
               transition: 'all 0.25s ease',
             }}
           >
@@ -747,7 +747,7 @@ const ExamInstructions = () => {
           {exam && examStatus !== 'LOADING' && (
             <Box
               sx={{
-                p: 1.5,
+                p: 2,
                 borderRadius: 3,
                 border: examStatus === 'AVAILABLE' 
                   ? '1.5px solid rgba(16,185,129,0.35)' 
@@ -759,7 +759,7 @@ const ExamInstructions = () => {
                   : examStatus === 'ENDED'
                     ? 'rgba(239,68,68,0.04)'
                     : 'rgba(245,158,11,0.04)',
-                mb: 2,
+                mb: 2.5,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
@@ -817,13 +817,14 @@ const ExamInstructions = () => {
           <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
             <Button
               variant="contained"
+              size="large"
               disabled={!canProceed || starting}
               onClick={handleProceed}
               endIcon={!starting && <ArrowRight size={18} />}
               sx={{
-                px: 4,
-                py: 1,
-                fontSize: '0.95rem',
+                px: 5,
+                py: 1.5,
+                fontSize: '1rem',
                 fontWeight: 700,
                 fontFamily: '"Poppins", sans-serif',
                 borderRadius: 3,
