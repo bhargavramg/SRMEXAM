@@ -44,7 +44,7 @@ const DashboardLayout = () => {
           [`& .MuiDrawer-paper`]: { width: drawerWidth, boxSizing: 'border-box', borderRight: '1px solid #E3F2FD' },
         }}
       >
-        <Box sx={{ width: '100%', minHeight: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', py: 3, px: 2 }}>
+        <Box sx={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', pt: 3, pb: 1, px: 2 }}>
           <Box
             component="img"
             src="/srm-logo.png"
@@ -58,7 +58,7 @@ const DashboardLayout = () => {
             }}
           />
         </Box>
-        <Box sx={{ overflow: 'auto', mt: 1, px: 2 }}>
+        <Box sx={{ overflow: 'auto', px: 2 }}>
           <List>
             {menuItems.map((item) => {
               const isActive = pathname.startsWith(item.path);

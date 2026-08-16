@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -139,6 +139,17 @@ const ExamInstructions = () => {
     queryFn: () => studentApi.getExamDetails(examId),
   });
 
+  // ── fullscreen tracking ──────────────────────────────────────────────────
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setFullscreenEnabled(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
   // ── fullscreen toggle ────────────────────────────────────────────────────
   const handleEnableFullscreen = useCallback(async () => {
     setEnablingFullscreen(true);
@@ -172,8 +183,9 @@ const ExamInstructions = () => {
   // ── proceed to lobby (which handles session start) ───────────────────────
   const handleProceed = useCallback(() => {
     const requiresFullscreen = exam?.config?.requireFullscreen !== false; // default true
-    if (requiresFullscreen && !fullscreenEnabled) {
-      enqueueSnackbar('Please enable fullscreen mode before proceeding.', { variant: 'error' });
+    if (requiresFullscreen && !document.fullscreenElement) {
+      setFullscreenEnabled(false);
+      enqueueSnackbar('Your exam cannot be started unless fullscreen mode is enabled. Please enter fullscreen again to continue.', { variant: 'error' });
       return;
     }
     if (!agreed) {
@@ -184,7 +196,7 @@ const ExamInstructions = () => {
     }
     // Navigate to the existing lobby which handles session creation
     navigate(`/student/exam/${examId}/lobby`);
-  }, [agreed, fullscreenEnabled, exam, examId, navigate, enqueueSnackbar]);
+  }, [agreed, exam, examId, navigate, enqueueSnackbar]);
 
   // ── loading / error states ───────────────────────────────────────────────
   if (isLoading) {
