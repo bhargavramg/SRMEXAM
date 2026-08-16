@@ -391,7 +391,7 @@ const ExamInstructions = () => {
       <Box
         sx={{
           width: '100%',
-          maxWidth: 860,
+          maxWidth: 1100,
           background: '#FFFFFF',
           borderRadius: 4,
           boxShadow: '0 8px 40px rgba(21,101,192,0.10), 0 2px 8px rgba(0,0,0,0.04)',
