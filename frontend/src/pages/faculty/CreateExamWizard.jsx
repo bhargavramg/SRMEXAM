@@ -232,7 +232,7 @@ const CreateExamWizard = () => {
                 label="Faculty Assignment"
                 options={assignmentOptions}
                 required
-                renderValue={renderAssignmentValue}
+                renderValue={formValues.facultyAssignmentId ? renderAssignmentValue : undefined}
                 renderOption={renderAssignmentOption}
               />
             </Grid>
