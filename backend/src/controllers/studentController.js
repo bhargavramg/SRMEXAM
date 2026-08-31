@@ -324,7 +324,7 @@ exports.getResults = async (req, res) => {
     });
 
     // Map results: published show full data, unpublished show limited
-    const mapped = results.map(r => {
+    const mapped = await Promise.all(results.map(async r => {
       const base = {
         id: r.id,
         examId: r.examId,
@@ -357,6 +357,40 @@ exports.getResults = async (req, res) => {
       }
 
       if (isVisible) {
+        let answerReview = [];
+        if (r.sessionId) {
+          const answers = await prisma.studentAnswer.findMany({
+            where: { sessionId: r.sessionId },
+            include: {
+              question: {
+                include: { options: true }
+              },
+              selectedOptions: true
+            }
+          });
+
+          // Fetch exam questions to maintain correct order if needed, but we can just use the order from questions or we can sort them here.
+          // Better yet, just return the mapped answers.
+          answerReview = answers.map(a => {
+            const isAnswered = a.selectedOptions.length > 0 || (a.textAnswer && a.textAnswer.trim() !== '');
+            return {
+              questionId: a.question.id,
+              questionText: a.question.text,
+              questionType: a.question.type,
+              options: a.question.options.map(o => ({
+                id: o.id,
+                text: o.text,
+                isCorrect: o.isCorrect
+              })),
+              studentSelectedOptions: a.selectedOptions.map(o => ({ id: o.id, text: o.text })),
+              textAnswer: a.textAnswer,
+              isCorrect: a.isCorrect,
+              marksObtained: a.marksObtained,
+              status: !isAnswered ? 'NOT_ANSWERED' : (a.isCorrect ? 'CORRECT' : 'WRONG')
+            };
+          });
+        }
+
         return {
           ...base,
           totalMarks: r.totalMarks,
@@ -372,6 +406,7 @@ exports.getResults = async (req, res) => {
           correctAnswers: r.correctAnswers,
           incorrectAnswers: r.incorrectAnswers,
           unansweredQuestions: r.unansweredQuestions,
+          answerReview,
         };
       }
 
@@ -380,7 +415,7 @@ exports.getResults = async (req, res) => {
         ...base,
         isProvisional: true,
       };
-    });
+    }));
 
     res.json(mapped);
   } catch (error) {

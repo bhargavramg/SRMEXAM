@@ -180,6 +180,84 @@ const ExamResult = () => {
             </Typography>
           )}
 
+          {/* Answer Review Section */}
+          {resultInfo.answerReview && resultInfo.answerReview.length > 0 && (
+            <Box sx={{ mt: 5, textAlign: 'left' }}>
+              <Typography variant="h5" fontWeight={700} color="primary" gutterBottom>
+                Question & Answer Review
+              </Typography>
+              <Divider sx={{ mb: 3 }} />
+              
+              {resultInfo.answerReview.map((q, index) => {
+                const isCorrect = q.status === 'CORRECT';
+                const isWrong = q.status === 'WRONG';
+                const notAnswered = q.status === 'NOT_ANSWERED';
+
+                // Find the student's answer text
+                let studentAnswerText = 'Not Answered';
+                if (!notAnswered) {
+                  if (q.studentSelectedOptions && q.studentSelectedOptions.length > 0) {
+                     studentAnswerText = q.studentSelectedOptions.map(opt => opt.text).join(', ');
+                  } else if (q.textAnswer) {
+                     studentAnswerText = q.textAnswer;
+                  }
+                }
+
+                // Find correct answer text
+                let correctAnswerText = 'N/A';
+                const correctOpts = q.options?.filter(o => o.isCorrect) || [];
+                if (correctOpts.length > 0) {
+                   correctAnswerText = correctOpts.map(o => o.text).join(', ');
+                }
+
+                return (
+                  <Box key={q.questionId} sx={{ mb: 4, p: 3, bgcolor: '#F8FAFC', borderRadius: 2, border: '1px solid #E2E8F0' }}>
+                    <Typography variant="subtitle1" fontWeight={700} color="primary" gutterBottom>
+                      Question {index + 1}
+                    </Typography>
+                    <Typography variant="body1" sx={{ mb: 2 }} dangerouslySetInnerHTML={{ __html: q.questionText }} />
+                    
+                    {/* Options */}
+                    {q.options && q.options.length > 0 && (
+                      <Box sx={{ mb: 2 }}>
+                        {q.options.map((opt, i) => {
+                          const isStudentSelected = q.studentSelectedOptions?.some(so => so.id === opt.id);
+                          const prefix = String.fromCharCode(65 + i); // A, B, C, D...
+                          return (
+                            <Typography key={opt.id} variant="body2" sx={{ mb: 0.5 }}>
+                              {isStudentSelected ? '●' : '○'} {prefix}. {opt.text}
+                            </Typography>
+                          );
+                        })}
+                      </Box>
+                    )}
+
+                    <Box sx={{ mt: 2, p: 2, bgcolor: '#ffffff', borderRadius: 1, border: '1px solid #E2E8F0' }}>
+                      <Typography variant="body2" sx={{ mb: 1 }}>
+                        <strong>Your Answer:</strong> {studentAnswerText}
+                      </Typography>
+                      {/* Only show Correct Answer for questions with options */}
+                      {q.options && q.options.length > 0 && (
+                        <Typography variant="body2" sx={{ mb: 1 }}>
+                          <strong>Correct Answer:</strong> {correctAnswerText}
+                        </Typography>
+                      )}
+                      
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                        <Typography variant="body2" component="span">
+                          <strong>Status:</strong> 
+                        </Typography>
+                        {isCorrect && <Chip size="small" icon={<CheckCircle size={14} />} label="Correct" color="success" sx={{ height: 24 }} />}
+                        {isWrong && <Chip size="small" icon={<AlertCircle size={14} />} label="Wrong" color="error" sx={{ height: 24 }} />}
+                        {notAnswered && <Chip size="small" label="Not Answered" color="default" sx={{ height: 24 }} />}
+                      </Box>
+                    </Box>
+                  </Box>
+                );
+              })}
+            </Box>
+          )}
+
           <Box sx={{ mt: 4 }}>
             <Button variant="contained" size="large" onClick={() => navigate('/student/dashboard')} sx={{ px: 4, py: 1.5 }}>
               Return to Dashboard
