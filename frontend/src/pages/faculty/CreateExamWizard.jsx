@@ -214,7 +214,7 @@ const CreateExamWizard = () => {
     switch (step) {
       case 0:
         return (
-          <Grid container spacing={2}>
+          <Grid container spacing={4}>
             <Grid item xs={12} sm={6}>
               <FormInput
                 name="title"
@@ -272,7 +272,7 @@ const CreateExamWizard = () => {
 
       case 1:
         return (
-          <Grid container spacing={2}>
+          <Grid container spacing={4}>
             <Grid item xs={12} sm={4}>
               <FormInput
                 name="durationMins"
@@ -321,7 +321,7 @@ const CreateExamWizard = () => {
                 Total selected marks ({totalSelectedMarks}) exceed the exam total marks ({formValues.totalMarks}). Please adjust.
               </Alert>
             )}
-            <Grid container spacing={2}>
+            <Grid container spacing={4}>
               <Grid item xs={12} md={8}>
                 <DataTable
                   rows={questions}
@@ -366,7 +366,7 @@ const CreateExamWizard = () => {
 
       case 3:
         return (
-          <Grid container spacing={2}>
+          <Grid container spacing={4}>
             <Grid item xs={12}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                 <Divider sx={{ flex: 1 }} />
@@ -436,7 +436,7 @@ const CreateExamWizard = () => {
         return (
           <Box>
             <Alert severity="success" sx={{ mb: 2 }}>Review your exam configuration before saving.</Alert>
-            <Grid container spacing={2}>
+            <Grid container spacing={4}>
               <Grid item xs={12} sm={6}>
                 <Card variant="outlined" sx={{ boxShadow: 'none', borderRadius: 1.5 }}>
                   <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
