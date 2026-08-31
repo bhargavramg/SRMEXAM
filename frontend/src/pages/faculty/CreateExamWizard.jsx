@@ -215,7 +215,7 @@ const CreateExamWizard = () => {
       case 0:
         return (
           <Grid container spacing={4}>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12}>
               <FormInput
                 name="title"
                 control={control}
@@ -225,7 +225,7 @@ const CreateExamWizard = () => {
                 sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12}>
               <FormSelect
                 name="facultyAssignmentId"
                 control={control}
