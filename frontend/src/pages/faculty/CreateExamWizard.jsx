@@ -194,7 +194,7 @@ const CreateExamWizard = () => {
 
   const renderAssignmentValue = (selectedId) => {
     const opt = assignmentOptions.find(o => o.value === selectedId);
-    if (!opt) return <Typography variant="body2" color="text.secondary">Select assignment</Typography>;
+    if (!opt) return null;
     return (
       <Box>
         <Typography variant="body2" fontWeight={500} lineHeight={1.3}>{opt.label}</Typography>
@@ -232,7 +232,6 @@ const CreateExamWizard = () => {
                 label="Faculty Assignment"
                 options={assignmentOptions}
                 required
-                placeholder="Select assignment"
                 renderValue={renderAssignmentValue}
                 renderOption={renderAssignmentOption}
               />
